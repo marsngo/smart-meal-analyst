@@ -11,26 +11,33 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="محلل البيانات الإنسانية الذكي", page_icon="📊", layout="wide")
 
-# --- واجهة المستخدم الذكية والمرنة (تتبع ثيم المتصفح والويندوز تلقائياً) ---
+# --- واجهة المستخدم الذكية والمرنة (تتبع ثيم المتصفح والويندوز تلقائياً مع إصلاح التداخل) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght=400;500;700&display=swap');
         
-        /* تطبيق الخط والاتجاهات دون إجبار الألوان خلفية */
+        /* تطبيق خط تاويل والاتجاه العام دون تخريب عناصر الواجهة */
         html, body, [data-testid="stAppViewContainer"] {
             font-family: 'Tajawal', sans-serif;
             direction: RTL;
-            text-align: right;
         }
-        h1, h2, h3, h4, label, p, span {
+        
+        /* محاذاة العناوين والنصوص الصريحة لليمين فقط */
+        h1, h2, h3, h4, .stMarkdown p, label {
             text-align: right !important;
             direction: RTL !important;
             font-family: 'Tajawal', sans-serif !important;
         }
         
+        /* استثناء حقول الإدخال وأزرار الرفع من التنسيق الإجباري لمنع التداخل */
+        [data-testid="id-textbox"], .stTextInput input, [data-testid="stFileUploader"] {
+            direction: ltr !important;
+            text-align: left !important;
+        }
+        
         /* تنسيقات الصناديق لتتناسب بصرياً مع الثيم الفاتح والداكن */
         .kpi-container {
-            background: linear-gradient(135deg, rgba(30, 27, 75, 0.15) 0%, rgba(15, 23, 42, 0.05) 100%);
+            background-color: rgba(59, 130, 246, 0.08);
             border: 2px solid #3b82f6;
             padding: 20px;
             border-radius: 12px;
@@ -38,21 +45,21 @@ st.markdown("""
             margin-bottom: 15px;
         }
         .audit-card {
-            background-color: rgba(239, 68, 68, 0.1);
+            background-color: rgba(239, 68, 68, 0.08);
             border-right: 5px solid #ef4444;
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 15px;
         }
         .audit-card-warning {
-            background-color: rgba(245, 158, 11, 0.1);
+            background-color: rgba(245, 158, 11, 0.08);
             border-right: 5px solid #f59e0b;
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 15px;
         }
         .ai-narrative-box {
-            background-color: rgba(16, 185, 129, 0.1);
+            background-color: rgba(16, 185, 129, 0.08);
             border-right: 5px solid #10b981;
             padding: 25px;
             border-radius: 10px;
@@ -70,7 +77,7 @@ st.markdown("""
             margin-bottom: 30px;
         }
         .export-box {
-            background-color: rgba(99, 102, 241, 0.1);
+            background-color: rgba(99, 102, 241, 0.08);
             border: 2px solid #6366f1;
             padding: 25px;
             border-radius: 12px;
@@ -78,18 +85,16 @@ st.markdown("""
             text-align: center;
         }
         
-        /* شريط حفظ الحقوق الملكية الفخم للمطور في أسفل الصفحة */
+        /* شريط حفظ الحقوق الملكية المتوافق مع الثيمين */
         .rights-footer {
             margin-top: 80px;
             padding: 25px;
-            background: linear-gradient(90deg, #1e1b4b 0%, #312e81 100%);
-            color: #ffffff !important;
+            background-color: rgba(49, 46, 129, 0.05);
             border-radius: 12px;
             text-align: center;
-            border-top: 4px solid #6366f1;
+            border: 2px dashed #6366f1;
         }
         .rights-footer p, .rights-footer h4, .rights-footer span {
-            color: #ffffff !important;
             text-align: center !important;
             direction: ltr !important;
         }
@@ -187,11 +192,11 @@ if kobo_data is not None:
 
     kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
     with kpi_col1:
-        st.markdown(f"""<div class="kpi-container"><h3 style="color:#3b82f6; margin:0;">👥 إجمالي المستفيدين الكلي</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{total_beneficiaries:,}</h1></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="kpi-container"><h3>👥 إجمالي المستفيدين الكلي</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{total_beneficiaries:,}</h1></div>""", unsafe_allow_html=True)
     with kpi_col2:
-        st.markdown(f"""<div class="kpi-container"><h3 style="color:#ec4899; margin:0;">👩‍🦰 نسبة الإناث في العينة</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{female_pct}</h1></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="kpi-container"><h3>👩‍🦰 نسبة الإناث في العينة</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{female_pct}</h1></div>""", unsafe_allow_html=True)
     with kpi_col3:
-        st.markdown(f"""<div class="kpi-container"><h3 style="color:#10b981; margin:0;">♿ نسبة إعاقات المستفيدين</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{pwd_pct}</h1></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="kpi-container"><h3>♿ نسبة إعاقات المستفيدين</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{pwd_pct}</h1></div>""", unsafe_allow_html=True)
 
     loc_col = [c for c in kobo_data.columns if 'محافظة' in str(c) or 'governorate' in str(c).lower()]
     if loc_col:
@@ -224,13 +229,13 @@ if kobo_data is not None:
     with audit_col1:
         st.markdown("### ⏱️ كشف سرعة جمع البيانات")
         if speeders_count > 0:
-            st.markdown(f"""<div class="audit-card"><h4 style="color:#ef4444; margin:0;">⚠️ تنبيه: تم رصد {speeders_count} استمارة مشبوهة!</h4><p style="margin-top:10px;">استغرق ملؤها أقل من 3 دقائق (احتمال تزوير).</p></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="audit-card"><h4>⚠️ تنبيه: تم رصد {speeders_count} استمارة مشبوهة!</h4><p style="margin-top:10px;">استغرق ملؤها أقل من 3 دقائق (احتمال تزوير).</p></div>""", unsafe_allow_html=True)
         else:
             st.success("✅ جميع المقابلات استغرقت وقتاً منطقياً.")
     with audit_col2:
         st.markdown("### 🕳️ فحص الأسئلة المهملة (المفقودة)")
         if not top_missing_questions.empty:
-            st.markdown(f"""<div class="audit-card-warning"><h4 style="color:#f59e0b; margin:0;">⚠️ تنبيه: هناك أسئلة تحتوي على فجوات كبيرة!</h4></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="audit-card-warning"><h4>⚠️ تنبيه: هناك أسئلة تحتوي على فجوات كبيرة!</h4></div>""", unsafe_allow_html=True)
             for idx, (col_name, count) in enumerate(top_missing_questions.items(), 1):
                 st.warning(f"**{idx}. {col_name}** -> مفقود في **{count}** استمارة.")
         else:
@@ -344,10 +349,10 @@ if kobo_data is not None:
                                 except Exception as e:
                                     st.error(f"خطأ في الـ AI: {e}")
                                     narrative_text = "فشل توليد التقرير"
-                        else:
-                            narrative_text = existing[0]['text']
+                            else:
+                                narrative_text = existing[0]['text']
 
-                        st.markdown(f"""<div class="ai-narrative-box"><h4 style="color:#10b981; margin:0; font-weight:700; margin-bottom:10px;">📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
+                        st.markdown(f"""<div class="ai-narrative-box"><h4>📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
 
             # --- مركز التحميل الكلي ---
             if st.session_state.generated_reports:
@@ -388,11 +393,11 @@ if kobo_data is not None:
 else:
     st.info("💡 بانتظار ربط البيانات للبدء بالتحليل التنفيذي والمتقدم...")
 
-# ==================== 💎 تذييل حفظ الحقوق الملكية لعام 2026 ====================
+# ==================== 💎 تذييل حفظ الحقوق الملكية ====================
 st.markdown("""
     <div class="rights-footer">
-        <h4 style="margin:0; font-weight:700; font-size:18px;">💡 Smart MEAL Platform | منصة التحليل الذكي للمتابعة والتقييم</h4>
-        <p style="margin:8px 0 0 0; font-size:14px; opacity:0.9;">Designed & Developed by: <b>Mhedy Alkhaldi</b> © 2026</p>
-        <p style="margin:5px 0 0 0; font-size:12px; opacity:0.75; font-style:italic;">Open-Source Humanitarian Solution - Dedicated for General Benefit & Philanthropy</p>
+        <h4 style="margin:0; font-weight:700; font-size:18px; color: #312e81 !important;">💡 Smart MEAL Platform | منصة التحليل الذكي للمتابعة والتقييم</h4>
+        <p style="margin:8px 0 0 0; font-size:14px; color: #4b5563 !important;">Designed & Developed by: <b>Mhedy Alkhaldi</b> © 2026</p>
+        <p style="margin:5px 0 0 0; font-size:12px; color: #6b7280 !important; font-style:italic;">Open-Source Humanitarian Solution - Dedicated for General Benefit & Philanthropy</p>
     </div>
 """, unsafe_allow_html=True)
