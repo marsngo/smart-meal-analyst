@@ -11,31 +11,23 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="محلل البيانات الإنسانية الذكي", page_icon="📊", layout="wide")
 
-# --- واجهة المستخدم الذكية والمرنة (تتبع ثيم المتصفح والويندوز تلقائياً مع إصلاح التداخل) ---
+# --- واجهة المستخدم الذكية والمرنة ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght=400;500;700&display=swap');
-        
-        /* تطبيق خط تاويل والاتجاه العام دون تخريب عناصر الواجهة */
         html, body, [data-testid="stAppViewContainer"] {
             font-family: 'Tajawal', sans-serif;
             direction: RTL;
         }
-        
-        /* محاذاة العناوين والنصوص الصريحة لليمين فقط */
         h1, h2, h3, h4, .stMarkdown p, label {
             text-align: right !important;
             direction: RTL !important;
             font-family: 'Tajawal', sans-serif !important;
         }
-        
-        /* استثناء حقول الإدخال وأزرار الرفع من التنسيق الإجباري لمنع التداخل */
         [data-testid="id-textbox"], .stTextInput input, [data-testid="stFileUploader"] {
             direction: ltr !important;
             text-align: left !important;
         }
-        
-        /* تنسيقات الصناديق لتتناسب بصرياً مع الثيم الفاتح والداكن */
         .kpi-container {
             background-color: rgba(59, 130, 246, 0.08);
             border: 2px solid #3b82f6;
@@ -84,8 +76,6 @@ st.markdown("""
             margin-top: 40px;
             text-align: center;
         }
-        
-        /* شريط حفظ الحقوق الملكية المتوافق مع الثيمين */
         .rights-footer {
             margin-top: 80px;
             padding: 25px;
@@ -104,10 +94,25 @@ st.markdown("""
 st.title("📊 منصة أدوات المسح الميداني والتحليل الذكي (Smart MEAL)")
 st.subheader("إصدار مفتوح المصدر - نظام معالجة البيانات الإنسانية وصياغة التقارير الفورية")
 
-# --- الشريط الجانبي الذكي للمانحين والألوان ---
+# --- تهيئة وإدارة مستودع الجلسة المستمر لحفظ البيانات من الاختفاء ---
+if 'kobo_data' not in st.session_state:
+    st.session_state.kobo_data = None
+if 'generated_reports' not in st.session_state:
+    st.session_state.generated_reports = []
+
+# --- إدارة وحقن الـ API Key السري والمجاني التلقائي ---
+embedded_api_key = ""
+if "GEMINI_API_KEY" in st.secrets:
+    embedded_api_key = st.secrets["GEMINI_API_KEY"]
+
+# --- الشريط الجانبي الذكي ---
 with st.sidebar:
-    st.markdown("### 🔑 مفتاح الأمان للذكاء الاصطناعي")
-    api_key = st.text_input("أدخل مفتاح Gemini API الخاص بك:", type="password")
+    st.markdown("### 🔑 إدارة مفتاح الذكاء الاصطناعي")
+    if embedded_api_key:
+        st.success("🔒 تم تفعيل الـ API السحابي المدمج بنجاح (النظام يعمل مجاناً بدعم المنصة)!")
+        api_key = embedded_api_key
+    else:
+        api_key = st.text_input("أدخل مفتاح Gemini API يدوياً (اختياري إذا لم يتم ضبط السيرفر):", type="password")
     
     st.markdown("---")
     st.markdown("### 🎨 تخصيص الهوية البصرية")
@@ -129,8 +134,6 @@ with st.sidebar:
     st.markdown("### 🔌 إعدادات جلب البيانات")
     source_option = st.radio("اختر طريقة جلب البيانات الميدانية:", ("رفع ملف يدوي (Excel)", "سحب مباشر عبر الـ API"))
     
-    kobo_data = None
-    
     if source_option == "سحب مباشر عبر الـ API":
         server_url = st.selectbox("اختر سيرفر الكوبو:", ("https://eu.kobotoolbox.org", "https://kf.kobotoolbox.org", "https://kobo.humanitarianresponse.info"))
         api_token = st.text_input("أدخل رمز الأمان (API Token):", type="password")
@@ -143,8 +146,24 @@ with st.sidebar:
                 if response.status_code == 200:
                     json_data = response.json()
                     if 'results' in json_data:
-                        kobo_data = pd.DataFrame(json_data['results'])
-                        st.success("✅ تم سحب البيانات بنجاح!")
+                        raw_df = pd.DataFrame(json_data['results'])
+                        # تنظيف الحقول فوراً وحفظها في ذاكرة الجلسة المستمرة
+                        cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in raw_df.columns]
+                        final_cols = []
+                        seen_cols = {}
+                        for col in cleaned_cols:
+                            if col.strip() == "" or col.lower() == "nan": col = "عمود_غير_معرف"
+                            if col in seen_cols:
+                                seen_cols[col] += 1
+                                final_cols.append(f"{col}_{seen_cols[col]}")
+                            else:
+                                seen_cols[col] = 0
+                                final_cols.append(col)
+                        raw_df.columns = final_cols
+                        st.session_state.kobo_data = raw_df
+                        st.session_state.generated_reports = []
+                        st.success("✅ تم سحب البيانات وتأمينها في الجلسة!")
+                        st.rerun()
                 else:
                     st.error(f"فشل الاتصال بكوبو. رمز الخطأ: {response.status_code}")
             except Exception as e:
@@ -154,27 +173,33 @@ if source_option == "رفع ملف يدوي (Excel)":
     uploaded_file = st.file_uploader("قم برفع ملف البيانات الخام المستخرج من الكوبو (Excel):", type=["xlsx", "xls"])
     if uploaded_file is not None:
         try:
-            kobo_data = pd.read_excel(uploaded_file)
-            st.success("✅ تم قراءة ملف الإكسل بنجاح!")
+            raw_df = pd.read_excel(uploaded_file)
+            cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in raw_df.columns]
+            final_cols = []
+            seen_cols = {}
+            for col in cleaned_cols:
+                if col.strip() == "" or col.lower() == "nan": col = "عمود_غير_معرف"
+                if col in seen_cols:
+                    seen_cols[col] += 1
+                    final_cols.append(f"{col}_{seen_cols[col]}")
+                else:
+                    seen_cols[col] = 0
+                    final_cols.append(col)
+            raw_df.columns = final_cols
+            st.session_state.kobo_data = raw_df
+            st.success("✅ تم حفظ ملف الإكسل بنجاح!")
         except Exception as e:
             st.error(f"خطأ في قراءة الملف: {e}")
 
-# ==================== معالجة وعرض البيانات ====================
-if kobo_data is not None:
-    cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in kobo_data.columns]
-    final_cols = []
-    seen_cols = {}
-    for col in cleaned_cols:
-        if col.strip() == "" or col.lower() == "nan":
-            col = "عمود_غير_معرف"
-        if col in seen_cols:
-            seen_cols[col] += 1
-            final_cols.append(f"{col}_{seen_cols[col]}")
-        else:
-            seen_cols[col] = 0
-            final_cols.append(col)
-    kobo_data.columns = final_cols
+    if st.button("🗑️ مسح الجلسة وإعادة ضبط البيانات"):
+        st.session_state.kobo_data = None
+        st.session_state.generated_reports = []
+        st.rerun()
 
+# ==================== معالجة وعرض البيانات المستمرة ====================
+kobo_data = st.session_state.kobo_data
+
+if kobo_data is not None:
     # --- الـ Digital Factsheet ---
     st.markdown("---")
     st.header("✨ لوحة القيادة التنفيذية وملخص المؤشرات (Executive Factsheet)")
@@ -258,15 +283,12 @@ if kobo_data is not None:
         ("صياغة عامة رصينة", "OCHA (تركيز صارم على الأرقام، الاختصار، والاحتياج العاجل)", "UNICEF (تركيز على حماية الأطفال، الدمج، والنوع الاجتماعي)", "ECHO / SIDA (تركيز على الكفاءة، معايير المساءلة، والاستدامة)")
     )
 
-    if 'generated_reports' not in st.session_state:
-        st.session_state.generated_reports = []
-
     if main_questions:
         run_ai_global = False
         if cross_questions:
             st.markdown("### 🤖 التحكم بتقرير الذكاء الاصطناعي الشامل")
             if not api_key:
-                st.info("💡 لتوليد تقارير سردية تلقائية عبر Gemini، يرجى كتابة الـ API Key في الشريط الجانبي.")
+                st.info("💡 لتوليد تقارير سردية تلقائية عبر Gemini، يرجى تفعيل الـ API Key أولاً.")
             else:
                 run_ai_global = st.toggle("⚙️ تشغيل خبير الـ MEAL الذكي لإنتاج التقارير السردية تلقائياً")
 
