@@ -94,18 +94,15 @@ st.markdown("""
 st.title("📊 منصة أدوات المسح الميداني والتحليل الذكي (Smart MEAL)")
 st.subheader("إصدار مفتوح المصدر - نظام معالجة البيانات الإنسانية وصياغة التقارير الفورية")
 
-# --- تهيئة وإدارة مستودع الجلسة المستمر لحفظ البيانات ---
 if 'kobo_data' not in st.session_state:
     st.session_state.kobo_data = None
 if 'generated_reports' not in st.session_state:
     st.session_state.generated_reports = []
 
-# --- إدارة وحقن الـ API Key السري والمجاني التلقائي ---
 embedded_api_key = ""
 if "GEMINI_API_KEY" in st.secrets:
     embedded_api_key = st.secrets["GEMINI_API_KEY"]
 
-# --- الشريط الجانبي الذكي ---
 with st.sidebar:
     st.markdown("### 🔑 إدارة مفتاح الذكاء الاصطناعي")
     if embedded_api_key:
@@ -140,7 +137,6 @@ with st.sidebar:
         asset_id = st.text_input("أدخل معرف الاستمارة (Asset ID):")
         if st.button("🚀 سحب البيانات الآن"):
             try:
-                # 1. جلب بنية الاستمارة (خرائط الأسئلة والـ Labels) لاستبدال الأكواد بنصوص عربية صريحة
                 meta_url = f"{server_url}/api/v2/assets/{asset_id}/"
                 headers = {"Authorization": f"Token {api_token}"}
                 meta_response = requests.get(meta_url, headers=headers)
@@ -151,27 +147,17 @@ with st.sidebar:
                     for item in meta_json.get('content', {}).get('survey', []):
                         if 'name' in item and 'label' in item:
                             lbl = item['label']
-                            if isinstance(lbl, list) and len(lbl) > 0:
-                                label_mapping[item['name']] = str(lbl[0])
-                            elif isinstance(lbl, dict):
-                                # اختيار النص العربي إذا كان متعدد اللغات أو أول خيار متاح
-                                label_mapping[item['name']] = str(lbl.get('Arabic (ar)', list(lbl.values())[0]))
-                            else:
-                                label_mapping[item['name']] = str(lbl)
+                            if isinstance(lbl, list) and len(lbl) > 0: label_mapping[item['name']] = str(lbl[0])
+                            elif isinstance(lbl, dict): label_mapping[item['name']] = str(lbl.get('Arabic (ar)', list(lbl.values())[0]))
+                            else: label_mapping[item['name']] = str(lbl)
 
-                # 2. جلب البيانات الخام الحقيقية
                 data_url = f"{server_url}/api/v2/assets/{asset_id}/data/?format=json"
                 response = requests.get(data_url, headers=headers)
                 if response.status_code == 200:
                     json_data = response.json()
                     if 'results' in json_data:
                         raw_df = pd.DataFrame(json_data['results'])
-                        
-                        # استبدال أسماء الأعمدة (الأكواد) بالنصوص الصريحة والكاملة من خريطة الـ Labels
-                        if label_mapping:
-                            raw_df.rename(columns=label_mapping, inplace=True)
-                            
-                        # تنظيف نهائي للأعمدة لمنع أي مشاكل برمجية أو تكرار
+                        if label_mapping: raw_df.rename(columns=label_mapping, inplace=True)
                         cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in raw_df.columns]
                         final_cols = []
                         seen_cols = {}
@@ -184,7 +170,6 @@ with st.sidebar:
                                 seen_cols[col] = 0
                                 final_cols.append(col)
                         raw_df.columns = final_cols
-                        
                         st.session_state.kobo_data = raw_df
                         st.session_state.generated_reports = []
                         st.success("✅ تم سحب البيانات واستبدال الأكواد بالأسئلة العربية صراحة!")
@@ -221,11 +206,10 @@ if source_option == "رفع ملف يدوي (Excel)":
         st.session_state.generated_reports = []
         st.rerun()
 
-# ==================== معالجة وعرض البيانات المستمرة ====================
+# ==================== معالجة وعرض البيانات ====================
 kobo_data = st.session_state.kobo_data
 
 if kobo_data is not None:
-    # --- الـ Digital Factsheet ---
     st.markdown("---")
     st.header("✨ لوحة القيادة التنفيذية وملخص المؤشرات (Executive Factsheet)")
     total_beneficiaries = kobo_data.shape[0]
@@ -250,57 +234,57 @@ if kobo_data is not None:
     with kpi_col3:
         st.markdown(f"""<div class="kpi-container"><h3>♿ نسبة إعاقات المستفيدين</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{pwd_pct}</h1></div>""", unsafe_allow_html=True)
 
-    loc_col = [c for c in kobo_data.columns if 'محافظة' in str(c) or 'governorate' in str(c).lower()]
-    if loc_col:
-        st.markdown("#### 🌍 التوزيع الجغرافي للمستفيدين حسب المحافظات والقرى:")
-        loc_counts = kobo_data[loc_col[0]].value_counts().reset_index()
-        loc_counts.columns = ['الموقع / المحافظة', 'عدد المستفيدين']
-        fig_loc = px.pie(loc_counts, values='عدد المستفيدين', names='الموقع / المحافظة', title="نسبة توزيع الخدمات جغرافياً", color_discrete_sequence=selected_palette)
-        st.plotly_chart(fig_loc, use_container_width=True)
-
-    st.markdown("### 📋 نظرة عامة على البيانات الخام المستلمة")
+    st.markdown("### 📋 نظرة عامة على البيانات المستلمة")
     st.dataframe(kobo_data.head())
     
-    # --- تقرير التدقيق الآلي ---
+    # --- قسم مقارنة القبلي والبعدي المخصص (Pre vs Post) ---
     st.markdown("---")
-    st.header("🚨 تقرير التدقيق الآلي لجودة البيانات (Data Quality Audit)")
-    speeders_count = 0
-    if 'start' in kobo_data.columns and 'end' in kobo_data.columns:
-        try:
-            start_time = pd.to_datetime(kobo_data['start'])
-            end_time = pd.to_datetime(kobo_data['end'])
-            duration_minutes = (end_time - start_time).dt.total_seconds() / 60
-            speeders_count = kobo_data[duration_minutes < 3].shape[0]
-        except Exception:
-            pass
-
-    null_counts = kobo_data.isnull().sum()
-    top_missing_questions = null_counts[null_counts > 0].sort_values(ascending=False).head(3)
+    st.header("🔄 قسم مقارنة التقييم القبلي والبعدي (Pre vs Post Assessment)")
     
-    audit_col1, audit_col2 = st.columns(2)
-    with audit_col1:
-        st.markdown("### ⏱️ كشف سرعة جمع البيانات")
-        if speeders_count > 0:
-            st.markdown(f"""<div class="audit-card"><h4>⚠️ تنبيه: تم رصد {speeders_count} استمارة مشبوهة!</h4><p style="margin-top:10px;">استغرق ملؤها أقل من 3 دقائق (احتمال تزوير).</p></div>""", unsafe_allow_html=True)
-        else:
-            st.success("✅ جميع المقابلات استغرقت وقتاً منطقياً.")
-    with audit_col2:
-        st.markdown("### 🕳️ فحص الأسئلة المهملة (المفقودة)")
-        if not top_missing_questions.empty:
-            st.markdown(f"""<div class="audit-card-warning"><h4>⚠️ تنبيه: هناك أسئلة تحتوي على فجوات كبيرة!</h4></div>""", unsafe_allow_html=True)
-            for idx, (col_name, count) in enumerate(top_missing_questions.items(), 1):
-                st.warning(f"**{idx}. {col_name}** -> مفقود في **{count}** استمارة.")
-        else:
-            st.success("✅ لا توجد أي حقول مفقودة.")
+    pre_post_col1, pre_post_col2 = st.columns(2)
+    with pre_post_col1:
+        pre_column = st.selectbox("🎯 اختر عمود التقييم القبلي (Pre-test score):", ["لا يوجد"] + list(kobo_data.columns))
+    with pre_post_col2:
+        post_column = st.selectbox("🎯 اختر عمود التقييم البعدي (Post-test score):", ["لا يوجد"] + list(kobo_data.columns))
+        
+    if pre_column != "لا يوجد" and post_column != "لا يوجد":
+        try:
+            # تحويل البيانات إلى أرقام لحساب المتوسطات
+            pre_numeric = pd.to_numeric(kobo_data[pre_column], errors='coerce')
+            post_numeric = pd.to_numeric(kobo_data[post_column], errors='coerce')
+            
+            mean_pre = pre_numeric.mean()
+            mean_post = post_numeric.mean()
+            improvement = mean_post - mean_pre
+            
+            comp_col1, comp_col2, comp_col3 = st.columns(3)
+            with comp_col1:
+                st.metric(label="📊 متوسط القبلي (Pre)", value=f"{mean_pre:.2f}")
+            with comp_col2:
+                st.metric(label="📈 متوسط البعدي (Post)", value=f"{mean_post:.2f}")
+            with comp_col3:
+                st.metric(label="✨ الفارق الصافي والتحسن", value=f"{improvement:+.2f}", delta=f"{improvement:.2f}")
+                
+            # رسم مخطط المقارنة المخصص
+            df_compare = pd.DataFrame({
+                'المرحلة (Assessment)': ['التقييم القبلي (Pre)', 'التقييم البعدي (Post)'],
+                'متوسط الدرجة الكلية (Mean Score)': [mean_pre, mean_post]
+            })
+            fig_compare = px.bar(df_compare, x='المرحلة (Assessment)', y='متوسط الدرجة الكلية (Mean Score)', text='متوسط الدرجة الكلية (Mean Score)', title="مقارنة الأداء العام بين القبلي والبعدي", color='المرحلة (Assessment)', color_discrete_sequence=selected_palette)
+            fig_compare.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            st.plotly_chart(fig_compare, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"تأكد من أن الأعمدة المختارة تحتوي على أرقام أو سكورات صالحة للتحليل الحسابي. الخطأ: {e}")
 
-    # --- مصفوفة التحليل الكبرى ---
+    # --- مصفوفة التحليل الكبرى للفئات والأعمدة الديموغرافية ---
     st.markdown("---")
-    st.header("🎛️ مصفوفة التحليل والمقارنات الكبرى (The Bulk Analysis Matrix)")
+    st.header("🎛️ مصفوفة التحليل والمقارنات العامة (Bulk Analysis)")
     analysis_col1, analysis_col2 = st.columns(2)
     with analysis_col1:
-        main_questions = st.multiselect("1. اختر الأسئلة الأساسية المراد تحليلها:", list(kobo_data.columns))
+        main_questions = st.multiselect("1. اختر الأسئلة والمؤشرات المراد تحليلها نسب تكرارية:", list(kobo_data.columns))
     with analysis_col2:
-        cross_questions = st.multiselect("2. اختر متغيرات ومحاور التقاطع والتفكيك الديموغرافي/الجغرافي:", list(kobo_data.columns))
+        cross_questions = st.multiselect("2. اختر محاور التقاطع والديموغرافيا (مثال: الجنس، المحافظة):", list(kobo_data.columns))
 
     st.markdown("### 🎯 إعدادات تخصيص صياغة التقرير")
     donor_selection = st.selectbox(
@@ -355,9 +339,6 @@ if kobo_data is not None:
                         fig = px.bar(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, barmode='group', text=df_melted_pct['النسبة المئوية (%)'].astype(str) + '%', title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
                         fig.update_traces(textposition='outside')
                         st.plotly_chart(fig, use_container_width=True)
-                        
-                        img_bytes_for_user = fig.to_image(format="png", width=1000, height=500)
-                        st.download_button(label=f"📷 تحميل هذا الرسم البياني كصورة مستقلة (PNG)", data=img_bytes_for_user, file_name=f"Chart_{current_main}_{current_cross}.png", mime="image/png")
 
                     narrative_text = ""
                     if run_ai_global and api_key:
@@ -385,7 +366,6 @@ if kobo_data is not None:
                                     
                                     response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                                     narrative_text = response.text
-                                    img_bytes_for_word = fig.to_image(format="png", width=700, height=350)
 
                                     st.session_state.generated_reports.append({
                                         'main': current_main,
@@ -393,7 +373,7 @@ if kobo_data is not None:
                                         'donor': donor_selection,
                                         'theme': color_theme,
                                         'text': narrative_text,
-                                        'image': img_bytes_for_word
+                                        'image': None
                                     })
                                 except Exception as e:
                                     st.error(f"خطأ في الـ AI: {e}")
@@ -403,7 +383,7 @@ if kobo_data is not None:
 
                         st.markdown(f"""<div class="ai-narrative-box"><h4>📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
 
-            # --- مركز التحميل الكلي ---
+            # --- مركز التحميل الكلي لملفات الوورد السردية ---
             if 'generated_reports' in st.session_state and st.session_state.generated_reports:
                 valid_reports = [r for r in st.session_state.generated_reports if r['donor'] == donor_selection and r['theme'] == color_theme]
                 if valid_reports:
@@ -423,11 +403,6 @@ if kobo_data is not None:
                         h2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                         h3 = doc.add_heading(f"🔗 محور التفكيك: {report['cross']}", level=3)
                         h3.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                        
-                        if 'image' in report and report['image'] is not None:
-                            image_stream = io.BytesIO(report['image'])
-                            doc.add_picture(image_stream, width=Inches(6.0))
-                            doc.add_paragraph().paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                         
                         p = doc.add_paragraph(report['text'])
                         p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
