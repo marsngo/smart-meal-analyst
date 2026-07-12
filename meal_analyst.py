@@ -94,7 +94,7 @@ st.markdown("""
 st.title("📊 منصة أدوات المسح الميداني والتحليل الذكي (Smart MEAL)")
 st.subheader("إصدار مفتوح المصدر - نظام معالجة البيانات الإنسانية وصياغة التقارير الفورية")
 
-# --- تهيئة وإدارة مستودع الجلسة المستمر لحفظ البيانات من الاختفاء ---
+# --- تهيئة وإدارة مستودع الجلسة المستمر لحفظ البيانات ---
 if 'kobo_data' not in st.session_state:
     st.session_state.kobo_data = None
 if 'generated_reports' not in st.session_state:
@@ -109,10 +109,10 @@ if "GEMINI_API_KEY" in st.secrets:
 with st.sidebar:
     st.markdown("### 🔑 إدارة مفتاح الذكاء الاصطناعي")
     if embedded_api_key:
-        st.success("🔒 تم تفعيل الـ API السحابي المدمج بنجاح (النظام يعمل مجاناً بدعم المنصة)!")
+        st.success("🔒 تم تفعيل الـ API السحابي المدمج بنجاح!")
         api_key = embedded_api_key
     else:
-        api_key = st.text_input("أدخل مفتاح Gemini API يدوياً (اختياري إذا لم يتم ضبط السيرفر):", type="password")
+        api_key = st.text_input("أدخل مفتاح Gemini API يدوياً (اختياري):", type="password")
     
     st.markdown("---")
     st.markdown("### 🎨 تخصيص الهوية البصرية")
@@ -140,14 +140,38 @@ with st.sidebar:
         asset_id = st.text_input("أدخل معرف الاستمارة (Asset ID):")
         if st.button("🚀 سحب البيانات الآن"):
             try:
-                url = f"{server_url}/api/v2/assets/{asset_id}/data/?format=json"
+                # 1. جلب بنية الاستمارة (خرائط الأسئلة والـ Labels) لاستبدال الأكواد بنصوص عربية صريحة
+                meta_url = f"{server_url}/api/v2/assets/{asset_id}/"
                 headers = {"Authorization": f"Token {api_token}"}
-                response = requests.get(url, headers=headers)
+                meta_response = requests.get(meta_url, headers=headers)
+                
+                label_mapping = {}
+                if meta_response.status_code == 200:
+                    meta_json = meta_response.json()
+                    for item in meta_json.get('content', {}).get('survey', []):
+                        if 'name' in item and 'label' in item:
+                            lbl = item['label']
+                            if isinstance(lbl, list) and len(lbl) > 0:
+                                label_mapping[item['name']] = str(lbl[0])
+                            elif isinstance(lbl, dict):
+                                # اختيار النص العربي إذا كان متعدد اللغات أو أول خيار متاح
+                                label_mapping[item['name']] = str(lbl.get('Arabic (ar)', list(lbl.values())[0]))
+                            else:
+                                label_mapping[item['name']] = str(lbl)
+
+                # 2. جلب البيانات الخام الحقيقية
+                data_url = f"{server_url}/api/v2/assets/{asset_id}/data/?format=json"
+                response = requests.get(data_url, headers=headers)
                 if response.status_code == 200:
                     json_data = response.json()
                     if 'results' in json_data:
                         raw_df = pd.DataFrame(json_data['results'])
-                        # تنظيف الحقول فوراً وحفظها في ذاكرة الجلسة المستمرة
+                        
+                        # استبدال أسماء الأعمدة (الأكواد) بالنصوص الصريحة والكاملة من خريطة الـ Labels
+                        if label_mapping:
+                            raw_df.rename(columns=label_mapping, inplace=True)
+                            
+                        # تنظيف نهائي للأعمدة لمنع أي مشاكل برمجية أو تكرار
                         cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in raw_df.columns]
                         final_cols = []
                         seen_cols = {}
@@ -160,14 +184,15 @@ with st.sidebar:
                                 seen_cols[col] = 0
                                 final_cols.append(col)
                         raw_df.columns = final_cols
+                        
                         st.session_state.kobo_data = raw_df
                         st.session_state.generated_reports = []
-                        st.success("✅ تم سحب البيانات وتأمينها في الجلسة!")
+                        st.success("✅ تم سحب البيانات واستبدال الأكواد بالأسئلة العربية صراحة!")
                         st.rerun()
                 else:
                     st.error(f"فشل الاتصال بكوبو. رمز الخطأ: {response.status_code}")
             except Exception as e:
-                st.error(f"حدث خطأ: {e}")
+                st.error(f"حدث خطأ أثناء معالجة العناوين والبيانات: {e}")
 
 if source_option == "رفع ملف يدوي (Excel)":
     uploaded_file = st.file_uploader("قم برفع ملف البيانات الخام المستخرج من الكوبو (Excel):", type=["xlsx", "xls"])
