@@ -237,45 +237,70 @@ if kobo_data is not None:
     st.markdown("### 📋 نظرة عامة على البيانات المستلمة")
     st.dataframe(kobo_data.head())
     
-    # --- قسم مقارنة القبلي والبعدي المخصص (Pre vs Post) ---
+    # --- قسم مقارنة القبلي والبعدي المطور الذكي ---
     st.markdown("---")
     st.header("🔄 قسم مقارنة التقييم القبلي والبعدي (Pre vs Post Assessment)")
     
-    pre_post_col1, pre_post_col2 = st.columns(2)
-    with pre_post_col1:
-        pre_column = st.selectbox("🎯 اختر عمود التقييم القبلي (Pre-test score):", ["لا يوجد"] + list(kobo_data.columns))
-    with pre_post_col2:
-        post_column = st.selectbox("🎯 اختر عمود التقييم البعدي (Post-test score):", ["لا يوجد"] + list(kobo_data.columns))
-        
-    if pre_column != "لا يوجد" and post_column != "لا يوجد":
-        try:
-            # تحويل البيانات إلى أرقام لحساب المتوسطات
+    analysis_type = st.radio("اختر هيكلية تصميم ملف البيانات الحالي لديك:", ("الملف يحتوي على عمودين منفصلين (عمود للقبلي وعمود للبعدي)", "الملف يحتوي على عمود سكور واحد + عمود نصي يحدد نوع التقييم (قبلي/بعدي)"))
+    
+    mean_pre, mean_post = 0.0, 0.0
+    calculation_ready = False
+    
+    if analysis_type == "الملف يحتوي على عمودين منفصلين (عمود للقبلي وعمود للبعدي)":
+        pre_post_col1, pre_post_col2 = st.columns(2)
+        with pre_post_col1:
+            pre_column = st.selectbox("🎯 اختر عمود التقييم القبلي (Pre-test score):", ["لا يوجد"] + list(kobo_data.columns))
+        with pre_post_col2:
+            post_column = st.selectbox("🎯 اختر عمود التقييم البعدي (Post-test score):", ["لا يوجد"] + list(kobo_data.columns))
+            
+        if pre_column != "لا يوجد" and post_column != "لا يوجد":
             pre_numeric = pd.to_numeric(kobo_data[pre_column], errors='coerce')
             post_numeric = pd.to_numeric(kobo_data[post_column], errors='coerce')
-            
             mean_pre = pre_numeric.mean()
             mean_post = post_numeric.mean()
-            improvement = mean_post - mean_pre
+            calculation_ready = True
             
-            comp_col1, comp_col2, comp_col3 = st.columns(3)
-            with comp_col1:
-                st.metric(label="📊 متوسط القبلي (Pre)", value=f"{mean_pre:.2f}")
-            with comp_col2:
-                st.metric(label="📈 متوسط البعدي (Post)", value=f"{mean_post:.2f}")
-            with comp_col3:
-                st.metric(label="✨ الفارق الصافي والتحسن", value=f"{improvement:+.2f}", delta=f"{improvement:.2f}")
-                
-            # رسم مخطط المقارنة المخصص
-            df_compare = pd.DataFrame({
-                'المرحلة (Assessment)': ['التقييم القبلي (Pre)', 'التقييم البعدي (Post)'],
-                'متوسط الدرجة الكلية (Mean Score)': [mean_pre, mean_post]
-            })
-            fig_compare = px.bar(df_compare, x='المرحلة (Assessment)', y='متوسط الدرجة الكلية (Mean Score)', text='متوسط الدرجة الكلية (Mean Score)', title="مقارنة الأداء العام بين القبلي والبعدي", color='المرحلة (Assessment)', color_discrete_sequence=selected_palette)
-            fig_compare.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            st.plotly_chart(fig_compare, use_container_width=True)
+    else:
+        # فكفكة وهندسة الحالة المكررة (عمود سكور + عمود نوع التقييم)
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            score_column = st.selectbox("📊 اختر العمود الذي يحتوي على الدرجة والأسكور الكلي (Total Score):", ["لا يوجد"] + list(kobo_data.columns))
+        with filter_col2:
+            type_column = st.selectbox("🏷️ اختر العمود الذي يحدد نوع التقييم (مثال: نوع التقييم):", ["لا يوجد"] + list(kobo_data.columns))
             
-        except Exception as e:
-            st.error(f"تأكد من أن الأعمدة المختارة تحتوي على أرقام أو سكورات صالحة للتحليل الحسابي. الخطأ: {e}")
+        if score_column != "لا يوجد" and type_column != "لا يوجد":
+            # تصفية السطور بناءً على الكلمات النصية داخل العمود
+            pre_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('قبلي|pre', case=False, na=False)]
+            post_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('بعدي|post', case=False, na=False)]
+            
+            if not pre_rows.empty and not post_rows.empty:
+                mean_pre = pd.to_numeric(pre_rows[score_column], errors='coerce').mean()
+                mean_post = pd.to_numeric(post_rows[score_column], errors='coerce').mean()
+                calculation_ready = True
+            else:
+                st.warning("⚠️ لم نجد الكلمات الدلالية ('قبلي' أو 'بعدي') داخل العمود النصي المختار لتصفية السطور.")
+
+    # عرض نتائج الحسابات والمخطط الكلي النظيف من الأخطاء
+    if calculation_ready and not pd.isna(mean_pre) and not pd.isna(mean_post):
+        improvement = mean_post - mean_pre
+        
+        comp_col1, comp_col2, comp_col3 = st.columns(3)
+        with comp_col1:
+            st.metric(label="📊 متوسط القبلي (Pre)", value=f"{mean_pre:.2f}")
+        with comp_col2:
+            st.metric(label="📈 متوسط البعدي (Post)", value=f"{mean_post:.2f}")
+        with comp_col3:
+            st.metric(label="✨ الفارق الصافي والتحسن", value=f"{improvement:+.2f}", delta=f"{improvement:.2f}")
+            
+        df_compare = pd.DataFrame({
+            'المرحلة (Assessment)': ['التقييم القبلي (Pre)', 'التقييم البعدي (Post)'],
+            'متوسط الدرجة الكلية (Mean Score)': [mean_pre, mean_post]
+        })
+        fig_compare = px.bar(df_compare, x='المرحلة (Assessment)', y='متوسط الدرجة الكلية (Mean Score)', text='متوسط الدرجة الكلية (Mean Score)', title="مقارنة الأداء العام بين القبلي والبعدي", color='المرحلة (Assessment)', color_discrete_sequence=selected_palette)
+        fig_compare.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        st.plotly_chart(fig_compare, use_container_width=True)
+    elif calculation_ready:
+        st.error("⚠️ فشل حساب الأرقام. يرجى التحقق من أن عمود الدرجة يحتوي على أرقام صافية وخالٍ من النصوص الكشكولية.")
 
     # --- مصفوفة التحليل الكبرى للفئات والأعمدة الديموغرافية ---
     st.markdown("---")
@@ -383,7 +408,7 @@ if kobo_data is not None:
 
                         st.markdown(f"""<div class="ai-narrative-box"><h4>📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
 
-            # --- مركز التحميل الكلي لملفات الوورد السردية ---
+            # --- مركز التحميل الكلي لملفات الوورد ---
             if 'generated_reports' in st.session_state and st.session_state.generated_reports:
                 valid_reports = [r for r in st.session_state.generated_reports if r['donor'] == donor_selection and r['theme'] == color_theme]
                 if valid_reports:
