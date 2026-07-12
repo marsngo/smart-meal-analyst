@@ -7,51 +7,52 @@ from google import genai
 from docx import Document
 from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-import sqlite3
-import hashlib
 
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="محلل البيانات الإنسانية الذكي", page_icon="📊", layout="wide")
 
-# --- واجهة المستخدم الاحترافية الأكثر فخامة لعام 2026 ---
+# --- واجهة المستخدم الذكية والمرنة (تتبع ثيم المتصفح والويندوز تلقائياً) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght=400;500;700&display=swap');
+        
+        /* تطبيق الخط والاتجاهات دون إجبار الألوان خلفية */
         html, body, [data-testid="stAppViewContainer"] {
             font-family: 'Tajawal', sans-serif;
             direction: RTL;
             text-align: right;
-            background-color: #0e1117;
         }
         h1, h2, h3, h4, label, p, span {
             text-align: right !important;
             direction: RTL !important;
             font-family: 'Tajawal', sans-serif !important;
         }
+        
+        /* تنسيقات الصناديق لتتناسب بصرياً مع الثيم الفاتح والداكن */
         .kpi-container {
-            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
-            border: 1px solid #3b82f6;
+            background: linear-gradient(135deg, rgba(30, 27, 75, 0.15) 0%, rgba(15, 23, 42, 0.05) 100%);
+            border: 2px solid #3b82f6;
             padding: 20px;
             border-radius: 12px;
             text-align: center;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
         }
         .audit-card {
-            background-color: #1f2937;
+            background-color: rgba(239, 68, 68, 0.1);
             border-right: 5px solid #ef4444;
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 15px;
         }
         .audit-card-warning {
-            background-color: #1f2937;
+            background-color: rgba(245, 158, 11, 0.1);
             border-right: 5px solid #f59e0b;
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 15px;
         }
         .ai-narrative-box {
-            background-color: #064e3b;
+            background-color: rgba(16, 185, 129, 0.1);
             border-right: 5px solid #10b981;
             padding: 25px;
             border-radius: 10px;
@@ -69,343 +70,286 @@ st.markdown("""
             margin-bottom: 30px;
         }
         .export-box {
-            background-color: #1e1b4b;
+            background-color: rgba(99, 102, 241, 0.1);
             border: 2px solid #6366f1;
             padding: 25px;
             border-radius: 12px;
             margin-top: 40px;
             text-align: center;
         }
-        .login-box {
-            background-color: #1f2937;
-            padding: 40px;
-            border-radius: 15px;
-            border: 1px solid #4b5563;
-            max-width: 500px;
-            margin: 100px auto;
+        
+        /* شريط حفظ الحقوق الملكية الفخم للمطور في أسفل الصفحة */
+        .rights-footer {
+            margin-top: 80px;
+            padding: 25px;
+            background: linear-gradient(90deg, #1e1b4b 0%, #312e81 100%);
+            color: #ffffff !important;
+            border-radius: 12px;
+            text-align: center;
+            border-top: 4px solid #6366f1;
+        }
+        .rights-footer p, .rights-footer h4, .rights-footer span {
+            color: #ffffff !important;
+            text-align: center !important;
+            direction: ltr !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# ==================== 🔒 موديول إدارة المستخدمين والأمن وقاعدة البيانات ====================
-def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+st.title("📊 منصة أدوات المسح الميداني والتحليل الذكي (Smart MEAL)")
+st.subheader("إصدار مفتوح المصدر - نظام معالجة البيانات الإنسانية وصياغة التقارير الفورية")
 
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text:
-        return True
-    return False
-
-# إنشاء اتصال بقاعدة بيانات SQLite وإعداد جداول المستخدمين تلقائياً
-conn = sqlite3.connect('users.db', check_same_thread=False)
-c = conn.cursor()
-c.execute('CREATE TABLE IF NOT EXISTS userstable(username TEXT, password TEXT)')
-
-# حقن المستخدم الافتراضي (admin / meal2026) إذا كانت قاعدة البيانات فارغة تماماً لمرة واحدة
-c.execute('SELECT * FROM userstable WHERE username = ?', ('admin',))
-if not c.fetchone():
-    hashed_default_pwd = make_hashes('meal2026')
-    c.execute('INSERT INTO userstable(username, password) VALUES (?,?)', ('admin', hashed_default_pwd))
-    conn.commit()
-
-def login_user(username, password):
-    c.execute('SELECT password FROM userstable WHERE username =?', (username,))
-    data = c.fetchone()
-    if data:
-        return check_hashes(password, data[0])
-    return False
-
-# إدارة حالة جلسة الدخول في Streamlit لضمان ألا تضيع عند ضغط الأزرار
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-# ==================== 🛠️ شاشة تسجيل الدخول الافتراضية ====================
-if not st.session_state.logged_in:
-    st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.header("🔒 تسجيل دخول الموظفين المصرح لهم")
-    st.markdown("منصة إدارة وجودة البيانات الإنسانية الحساسة")
+# --- الشريط الجانبي الذكي للمانحين والألوان ---
+with st.sidebar:
+    st.markdown("### 🔑 مفتاح الأمان للذكاء الاصطناعي")
+    api_key = st.text_input("أدخل مفتاح Gemini API الخاص بك:", type="password")
     
-    user = st.text_input("اسم المستخدم:")
-    pwd = st.text_input("كلمة المرور:", type="password")
+    st.markdown("---")
+    st.markdown("### 🎨 تخصيص الهوية البصرية")
+    color_theme = st.selectbox(
+        "اختر ثيم الألوان للرسوم البيانية:",
+        ("الأزرق القياسي (Streamlit)", "الألوان الإنسانية الدافئة (مجموعة قطاع الحماية)", "ثيم الطبيعة الحيوي (الأخضر والأزرق)", "ثيم اليونيسف الرسمي (UNICEF Theme)", "ألوان فخمة داكنة (Sunset)")
+    )
     
-    if st.button("🚀 تسجيل الدخول الآمن"):
-        if login_user(user, pwd):
-            st.session_state.logged_in = True
-            st.success(f"✅ أهلاً بك يا مهندس {user}! جاري فتح لوحة التحكم...")
-            st.rerun()
-        else:
-            st.error("❌ اسم المستخدم أو كلمة المرور غير صحيحة، يرجى المحاولة مجدداً.")
-    st.markdown('</div>', unsafe_allow_html=True)
+    palette_map = {
+        "الأزرق القياسي (Streamlit)": px.colors.qualitative.G10,
+        "الألوان الإنسانية الدافئة (مجموعة قطاع الحماية)": px.colors.qualitative.Bold,
+        "ثيم الطبيعة الحيوي (الأخضر والأزرق)": px.colors.qualitative.T10,
+        "ثيم اليونيسف الرسمي (UNICEF Theme)": px.colors.qualitative.Set2,
+        "ألوان فخمة داكنة (Sunset)": px.colors.qualitative.Dark24
+    }
+    selected_palette = palette_map[color_theme]
 
-# ==================== 📊 لوحة التحكم الرئيسية (تظهر فقط بعد تسجيل الدخول بنجاح) ====================
-else:
-    # زر تسجيل الخروج الفخم في أعلى اليمين
-    col_title, col_logout = st.columns([6, 1])
-    with col_title:
-        st.title("📊 منصة أدوات المسح الميداني والتحليل الذكي (Smart MEAL)")
-    with col_logout:
-        if st.button("🚪 تسجيل الخروج"):
-            st.session_state.logged_in = False
-            st.rerun()
-            
-    st.subheader("إصدار v8.0 - بيئة الأنظمة المؤمنة وقاعدة بيانات المستخدمين المشفرة")
-
-    # --- الشريط الجانبي الفخم ---
-    with st.sidebar:
-        st.markdown(f"👤 الموظف النشط: **Admin**")
-        st.markdown("---")
-        st.markdown("### 🔑 مفتاح الأمان للذكاء الاصطناعي")
-        api_key = st.text_input("أدخل مفتاح Gemini API الخاص بك:", type="password")
-        
-        st.markdown("---")
-        st.markdown("### 🎨 تخصيص الهوية البصرية")
-        color_theme = st.selectbox(
-            "اختر ثيم الألوان للرسوم البيانية:",
-            ("الأزرق القياسي (Streamlit)", "الألوان الإنسانية الدافئة (مجموعة قطاع الحماية)", "ثيم الطبيعة الحيوي (الأخضر والأزرق)", "ثيم اليونيسف الرسمي (UNICEF Theme)", "ألوان فخمة داكنة (Sunset)")
-        )
-        
-        palette_map = {
-            "الأزرق القياسي (Streamlit)": px.colors.qualitative.G10,
-            "الألوان الإنسانية الدافئة (مجموعة قطاع الحماية)": px.colors.qualitative.Bold,
-            "ثيم الطبيعة الحيوي (الأخضر والأزرق)": px.colors.qualitative.T10,
-            "ثيم اليونيسف الرسمي (UNICEF Theme)": px.colors.qualitative.Set2,
-            "ألوان فخمة داكنة (Sunset)": px.colors.qualitative.Dark24
-        }
-        selected_palette = palette_map[color_theme]
-
-        st.markdown("---")
-        st.markdown("### 🔌 إعدادات جلب البيانات")
-        source_option = st.radio("اختر طريقة جلب البيانات الميدانية:", ("رفع ملف يدوي (Excel)", "سحب مباشر عبر الـ API"))
-        
-        kobo_data = None
-        
-        if source_option == "سحب مباشر عبر الـ API":
-            server_url = st.selectbox("اختر سيرفر الكوبو:", ("https://kf.kobotoolbox.org", "https://kobo.humanitarianresponse.info"))
-            api_token = st.text_input("أدخل رمز الأمان (API Token):", type="password")
-            asset_id = st.text_input("أدخل معرف الاستمارة (Asset ID):")
-            if st.button("🚀 سحب البيانات الآن"):
-                try:
-                    url = f"{server_url}/api/v2/assets/{asset_id}/data/?format=json"
-                    headers = {"Authorization": f"Token {api_token}"}
-                    response = requests.get(url, headers=headers)
-                    if response.status_code == 200:
-                        json_data = response.json()
-                        if 'results' in json_data:
-                            kobo_data = pd.DataFrame(json_data['results'])
-                            st.success("✅ تم سحب البيانات بنجاح!")
-                except Exception as e:
-                    st.error(f"حدث خطأ: {e}")
-
-    if source_option == "رفع ملف يدوي (Excel)":
-        uploaded_file = st.file_uploader("قم برفع ملف البيانات الخام المستخرج من الكوبو (Excel):", type=["xlsx", "xls"])
-        if uploaded_file is not None:
+    st.markdown("---")
+    st.markdown("### 🔌 إعدادات جلب البيانات")
+    source_option = st.radio("اختر طريقة جلب البيانات الميدانية:", ("رفع ملف يدوي (Excel)", "سحب مباشر عبر الـ API"))
+    
+    kobo_data = None
+    
+    if source_option == "سحب مباشر عبر الـ API":
+        server_url = st.selectbox("اختر سيرفر الكوبو:", ("https://kf.kobotoolbox.org", "https://kobo.humanitarianresponse.info"))
+        api_token = st.text_input("أدخل رمز الأمان (API Token):", type="password")
+        asset_id = st.text_input("أدخل معرف الاستمارة (Asset ID):")
+        if st.button("🚀 سحب البيانات الآن"):
             try:
-                kobo_data = pd.read_excel(uploaded_file)
-                st.success("✅ تم قراءة ملف الإكسل بنجاح!")
+                url = f"{server_url}/api/v2/assets/{asset_id}/data/?format=json"
+                headers = {"Authorization": f"Token {api_token}"}
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    json_data = response.json()
+                    if 'results' in json_data:
+                        kobo_data = pd.DataFrame(json_data['results'])
+                        st.success("✅ تم سحب البيانات بنجاح!")
             except Exception as e:
-                st.error(f"خطأ في قراءة الملف: {e}")
+                st.error(f"حدث خطأ: {e}")
 
-    # ==================== معالجة وعرض البيانات ====================
-    if kobo_data is not None:
-        cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in kobo_data.columns]
-        final_cols = []
-        seen_cols = {}
-        for col in cleaned_cols:
-            if col.strip() == "" or col.lower() == "nan":
-                col = "عمود_غير_معرف"
-            if col in seen_cols:
-                seen_cols[col] += 1
-                final_cols.append(f"{col}_{seen_cols[col]}")
-            else:
-                seen_cols[col] = 0
-                final_cols.append(col)
-        kobo_data.columns = final_cols
+if source_option == "رفع ملف يدوي (Excel)":
+    uploaded_file = st.file_uploader("قم برفع ملف البيانات الخام المستخرج من الكوبو (Excel):", type=["xlsx", "xls"])
+    if uploaded_file is not None:
+        try:
+            kobo_data = pd.read_excel(uploaded_file)
+            st.success("✅ تم قراءة ملف الإكسل بنجاح!")
+        except Exception as e:
+            st.error(f"خطأ في قراءة الملف: {e}")
 
-        # --- الـ Digital Factsheet ---
-        st.markdown("---")
-        st.header("✨ لوحة القيادة التنفيذية وملخص المؤشرات (Executive Factsheet)")
-        total_beneficiaries = kobo_data.shape[0]
+# ==================== معالجة وعرض البيانات ====================
+if kobo_data is not None:
+    cleaned_cols = [str(col).split('>')[-1].split('<')[0] if '<' in str(col) else str(col) for col in kobo_data.columns]
+    final_cols = []
+    seen_cols = {}
+    for col in cleaned_cols:
+        if col.strip() == "" or col.lower() == "nan":
+            col = "عمود_غير_معرف"
+        if col in seen_cols:
+            seen_cols[col] += 1
+            final_cols.append(f"{col}_{seen_cols[col]}")
+        else:
+            seen_cols[col] = 0
+            final_cols.append(col)
+    kobo_data.columns = final_cols
+
+    # --- الـ Digital Factsheet ---
+    st.markdown("---")
+    st.header("✨ لوحة القيادة التنفيذية وملخص المؤشرات (Executive Factsheet)")
+    total_beneficiaries = kobo_data.shape[0]
+    
+    gender_col = [c for c in kobo_data.columns if 'جنس' in str(c).lower() or 'gender' in str(c).lower()]
+    female_pct = "0%"
+    if gender_col:
+        female_count = kobo_data[kobo_data[gender_col[0]].astype(str).str.contains('أنثى|female|woman', case=False, na=False)].shape[0]
+        female_pct = f"{(female_count / total_beneficiaries * 100):.1f}%" if total_beneficiaries > 0 else "0%"
         
-        gender_col = [c for c in kobo_data.columns if 'جنس' in str(c).lower() or 'gender' in str(c).lower()]
-        female_pct = "0%"
-        if gender_col:
-            female_count = kobo_data[kobo_data[gender_col[0]].astype(str).str.contains('أنثى|female|woman', case=False, na=False)].shape[0]
-            female_pct = f"{(female_count / total_beneficiaries * 100):.1f}%" if total_beneficiaries > 0 else "0%"
-            
-        disability_col = [c for c in kobo_data.columns if 'disability' in str(c).lower() or 'إعاقة' in str(c).lower()]
-        pwd_pct = "0%"
-        if disability_col:
-            pwd_count = kobo_data[kobo_data[disability_col[0]].astype(str).str.contains('نعم|yes|true|disabled', case=False, na=False)].shape[0]
-            pwd_pct = f"{(pwd_count / total_beneficiaries * 100):.1f}%" if total_beneficiaries > 0 else "0%"
+    disability_col = [c for c in kobo_data.columns if 'disability' in str(c).lower() or 'إعاقة' in str(c).lower()]
+    pwd_pct = "0%"
+    if disability_col:
+        pwd_count = kobo_data[kobo_data[disability_col[0]].astype(str).str.contains('نعم|yes|true|disabled', case=False, na=False)].shape[0]
+        pwd_pct = f"{(pwd_count / total_beneficiaries * 100):.1f}%" if total_beneficiaries > 0 else "0%"
 
-        kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
-        with kpi_col1:
-            st.markdown(f"""<div class="kpi-container"><h3 style="color:#3b82f6; margin:0;">👥 إجمالي المستفيدين الكلي</h3><h1 style="color:#ffffff; font-size:42px; font-weight:700; margin-top:10px;">{total_beneficiaries:,}</h1></div>""", unsafe_allow_html=True)
-        with kpi_col2:
-            st.markdown(f"""<div class="kpi-container"><h3 style="color:#ec4899; margin:0;">👩‍🦰 نسبة الإناث في العينة</h3><h1 style="color:#ffffff; font-size:42px; font-weight:700; margin-top:10px;">{female_pct}</h1></div>""", unsafe_allow_html=True)
-        with kpi_col3:
-            st.markdown(f"""<div class="kpi-container"><h3 style="color:#10b981; margin:0;">♿ نسبة إعاقات المستفيدين</h3><h1 style="color:#ffffff; font-size:42px; font-weight:700; margin-top:10px;">{pwd_pct}</h1></div>""", unsafe_allow_html=True)
+    kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+    with kpi_col1:
+        st.markdown(f"""<div class="kpi-container"><h3 style="color:#3b82f6; margin:0;">👥 إجمالي المستفيدين الكلي</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{total_beneficiaries:,}</h1></div>""", unsafe_allow_html=True)
+    with kpi_col2:
+        st.markdown(f"""<div class="kpi-container"><h3 style="color:#ec4899; margin:0;">👩‍🦰 نسبة الإناث في العينة</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{female_pct}</h1></div>""", unsafe_allow_html=True)
+    with kpi_col3:
+        st.markdown(f"""<div class="kpi-container"><h3 style="color:#10b981; margin:0;">♿ نسبة إعاقات المستفيدين</h3><h1 style="font-size:42px; font-weight:700; margin-top:10px;">{pwd_pct}</h1></div>""", unsafe_allow_html=True)
 
-        loc_col = [c for c in kobo_data.columns if 'محافظة' in str(c) or 'governorate' in str(c).lower()]
-        if loc_col:
-            st.markdown("#### 🌍 التوزيع الجغرافي للمستفيدين حسب المحافظات والقرى:")
-            loc_counts = kobo_data[loc_col[0]].value_counts().reset_index()
-            loc_counts.columns = ['الموقع / المحافظة', 'عدد المستفيدين']
-            fig_loc = px.pie(loc_counts, values='عدد المستفيدين', names='الموقع / المحافظة', title="نسبة توزيع الخدمات جغرافياً", color_discrete_sequence=selected_palette)
-            fig_loc.update_layout(template="plotly_dark")
-            st.plotly_chart(fig_loc, use_container_width=True)
+    loc_col = [c for c in kobo_data.columns if 'محافظة' in str(c) or 'governorate' in str(c).lower()]
+    if loc_col:
+        st.markdown("#### 🌍 التوزيع الجغرافي للمستفيدين حسب المحافظات والقرى:")
+        loc_counts = kobo_data[loc_col[0]].value_counts().reset_index()
+        loc_counts.columns = ['الموقع / المحافظة', 'عدد المستفيدين']
+        fig_loc = px.pie(loc_counts, values='عدد المستفيدين', names='الموقع / المحافظة', title="نسبة توزيع الخدمات جغرافياً", color_discrete_sequence=selected_palette)
+        st.plotly_chart(fig_loc, use_container_width=True)
 
-        st.markdown("### 📋 نظرة عامة على البيانات الخام المستلمة")
-        st.dataframe(kobo_data.head())
-        
-        # --- تقرير التدقيق الآلي ---
-        st.markdown("---")
-        st.header("🚨 تقرير التدقيق الآلي لجودة البيانات (Data Quality Audit)")
-        speeders_count = 0
-        if 'start' in kobo_data.columns and 'end' in kobo_data.columns:
-            try:
-                start_time = pd.to_datetime(kobo_data['start'])
-                end_time = pd.to_datetime(kobo_data['end'])
-                duration_minutes = (end_time - start_time).dt.total_seconds() / 60
-                speeders_count = kobo_data[duration_minutes < 3].shape[0]
-            except Exception:
-                pass
+    st.markdown("### 📋 نظرة عامة على البيانات الخام المستلمة")
+    st.dataframe(kobo_data.head())
+    
+    # --- تقرير التدقيق الآلي ---
+    st.markdown("---")
+    st.header("🚨 تقرير التدقيق الآلي لجودة البيانات (Data Quality Audit)")
+    speeders_count = 0
+    if 'start' in kobo_data.columns and 'end' in kobo_data.columns:
+        try:
+            start_time = pd.to_datetime(kobo_data['start'])
+            end_time = pd.to_datetime(kobo_data['end'])
+            duration_minutes = (end_time - start_time).dt.total_seconds() / 60
+            speeders_count = kobo_data[duration_minutes < 3].shape[0]
+        except Exception:
+            pass
 
-        null_counts = kobo_data.isnull().sum()
-        top_missing_questions = null_counts[null_counts > 0].sort_values(ascending=False).head(3)
-        
-        audit_col1, audit_col2 = st.columns(2)
-        with audit_col1:
-            st.markdown("### ⏱️ كشف سرعة جمع البيانات")
-            if speeders_count > 0:
-                st.markdown(f"""<div class="audit-card"><h4 style="color:#ef4444; margin:0;">⚠️ تنبيه: تم رصد {speeders_count} استمارة مشبوهة!</h4><p style="color:#e5e7eb; margin-top:10px;">استغرق ملؤها أقل من 3 دقائق.</p></div>""", unsafe_allow_html=True)
+    null_counts = kobo_data.isnull().sum()
+    top_missing_questions = null_counts[null_counts > 0].sort_values(ascending=False).head(3)
+    
+    audit_col1, audit_col2 = st.columns(2)
+    with audit_col1:
+        st.markdown("### ⏱️ كشف سرعة جمع البيانات")
+        if speeders_count > 0:
+            st.markdown(f"""<div class="audit-card"><h4 style="color:#ef4444; margin:0;">⚠️ تنبيه: تم رصد {speeders_count} استمارة مشبوهة!</h4><p style="margin-top:10px;">استغرق ملؤها أقل من 3 دقائق (احتمال تزوير).</p></div>""", unsafe_allow_html=True)
+        else:
+            st.success("✅ جميع المقابلات استغرقت وقتاً منطقياً.")
+    with audit_col2:
+        st.markdown("### 🕳️ فحص الأسئلة المهملة (المفقودة)")
+        if not top_missing_questions.empty:
+            st.markdown(f"""<div class="audit-card-warning"><h4 style="color:#f59e0b; margin:0;">⚠️ تنبيه: هناك أسئلة تحتوي على فجوات كبيرة!</h4></div>""", unsafe_allow_html=True)
+            for idx, (col_name, count) in enumerate(top_missing_questions.items(), 1):
+                st.warning(f"**{idx}. {col_name}** -> مفقود في **{count}** استمارة.")
+        else:
+            st.success("✅ لا توجد أي حقول مفقودة.")
+
+    # --- مصفوفة التحليل الكبرى ---
+    st.markdown("---")
+    st.header("🎛️ مصفوفة التحليل والمقارنات الكبرى (The Bulk Analysis Matrix)")
+    analysis_col1, analysis_col2 = st.columns(2)
+    with analysis_col1:
+        main_questions = st.multiselect("1. اختر الأسئلة الأساسية المراد تحليلها:", list(kobo_data.columns))
+    with analysis_col2:
+        cross_questions = st.multiselect("2. اختر متغيرات ومحاور التقاطع والتفكيك الديموغرافي/الجغرافي:", list(kobo_data.columns))
+
+    st.markdown("### 🎯 إعدادات تخصيص صياغة التقرير")
+    donor_selection = st.selectbox(
+        "اختر المانح المستهدف لتوجه التقرير له:",
+        ("صياغة عامة رصينة", "OCHA (تركيز صارم على الأرقام، الاختصار، والاحتياج العاجل)", "UNICEF (تركيز على حماية الأطفال، الدمج، والنوع الاجتماعي)", "ECHO / SIDA (تركيز على الكفاءة، معايير المساءلة، والاستدامة)")
+    )
+
+    if 'generated_reports' not in st.session_state:
+        st.session_state.generated_reports = []
+
+    if main_questions:
+        run_ai_global = False
+        if cross_questions:
+            st.markdown("### 🤖 التحكم بتقرير الذكاء الاصطناعي الشامل")
+            if not api_key:
+                st.info("💡 لتوليد تقارير سردية تلقائية عبر Gemini، يرجى كتابة الـ API Key في الشريط الجانبي.")
             else:
-                st.success("✅ جميع المقابلات استغرقت وقتاً منطقياً.")
-        with audit_col2:
-            st.markdown("### 🕳️ فحص الأسئلة المهملة (المفقودة)")
-            if not top_missing_questions.empty:
-                st.markdown(f"""<div class="audit-card-warning"><h4 style="color:#f59e0b; margin:0;">⚠️ تنبيه: هناك أسئلة تحتوي على فجوات كبيرة!</h4></div>""", unsafe_allow_html=True)
-                for idx, (col_name, count) in enumerate(top_missing_questions.items(), 1):
-                    st.warning(f"**{idx}. {col_name}** -> مفقود في **{count}** استمارة.")
-            else:
-                st.success("✅ لا توجد أي حقول مفقودة.")
-
-        # --- مصفوفة التحليل الكبرى ---
-        st.markdown("---")
-        st.header("🎛️ مصفوفة التحليل والمقارنات الكبرى (The Bulk Analysis Matrix)")
-        analysis_col1, analysis_col2 = st.columns(2)
-        with analysis_col1:
-            main_questions = st.multiselect("1. اختر الأسئلة الأساسية المراد تحليلها:", list(kobo_data.columns))
-        with analysis_col2:
-            cross_questions = st.multiselect("2. اختر متغيرات ومحاور التقاطع والتفكيك الديموغرافي/الجغرافي:", list(kobo_data.columns))
-
-        st.markdown("### 🎯 إعدادات تخصيص صياغة التقرير")
-        donor_selection = st.selectbox(
-            "اختر المانح المستهدف لتوجه التقرير له:",
-            ("صياغة عامة رصينة", "OCHA (تركيز صارم على الأرقام، الاختصار، والاحتياج العاجل)", "UNICEF (تركيز على حماية الأطفال، الدمج، والنوع الاجتماعي)", "ECHO / SIDA (تركيز على الكفاءة، معايير المساءلة، والاستدامة)")
-        )
-
-        if 'generated_reports' not in st.session_state:
-            st.session_state.generated_reports = []
-
-        if main_questions:
-            run_ai_global = False
-            if cross_questions:
-                st.markdown("### 🤖 التحكم بتقرير الذكاء الاصطناعي الشامل")
-                if not api_key:
-                    st.info("💡 لتوليد تقارير سردية تلقائية عبر Gemini، يرجى كتابة الـ API Key في الشريط الجانبي.")
-                else:
-                    run_ai_global = st.toggle("⚙️ تشغيل خبير الـ MEAL الذكي لإنتاج التقارير السردية تلقائياً")
+                run_ai_global = st.toggle("⚙️ تشغيل خبير الـ MEAL الذكي لإنتاج التقارير السردية تلقائياً")
 
             if st.button("🔄 بدء معالجة وتحديث مصفوفة الألوان والمانح الحالي"):
                 st.session_state.generated_reports = []
                 st.rerun()
 
-            for current_main in main_questions:
-                st.markdown(f'<div class="matrix-divider"></div>', unsafe_allow_html=True)
-                st.markdown(f"## 📊 كتلة التحليل الأساسية للسؤال: [{current_main}]")
+        for current_main in main_questions:
+            st.markdown(f'<div class="matrix-divider"></div>', unsafe_allow_html=True)
+            st.markdown(f"## 📊 كتلة التحليل الأساسية للسؤال: [{current_main}]")
+            
+            if not cross_questions:
+                df_counts = kobo_data[current_main].value_counts().reset_index()
+                df_counts.columns = [current_main, 'العدد']
+                df_counts['النسبة المئوية (%)'] = (df_counts['العدد'] / df_counts['العدد'].sum() * 100).round(1)
                 
-                if not cross_questions:
-                    df_counts = kobo_data[current_main].value_counts().reset_index()
-                    df_counts.columns = [current_main, 'العدد']
-                    df_counts['النسبة المئوية (%)'] = (df_counts['العدد'] / df_counts['العدد'].sum() * 100).round(1)
+                chart_col, table_col = st.columns([2, 1])
+                with table_col:
+                    st.write("📋 جدول النسب التكرارية:")
+                    st.dataframe(df_counts)
+                with chart_col:
+                    fig = px.bar(df_counts, x=current_main, y='النسبة المئوية (%)', text=df_counts['النسبة المئوية (%)'].astype(str) + '%', title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                    fig.update_traces(textposition='outside')
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                for current_cross in cross_questions:
+                    st.markdown(f'<div class="cross-section-divider"></div>', unsafe_allow_html=True)
+                    st.markdown(f"### 🔗 المقارنة المئوية: [{current_main}] ✖️ [{current_cross}]")
                     
-                    chart_col, table_col = st.columns([2, 1])
+                    crosstab_pct = pd.crosstab(kobo_data[current_main], kobo_data[current_cross], normalize='columns') * 100
+                    crosstab_pct = crosstab_pct.round(1)
+                    df_melted_pct = pd.melt(crosstab_pct.reset_index(), id_vars=[current_main], value_name='النسبة المئوية (%)')
+                    
+                    chart_col, table_col = st.columns([1, 1])
                     with table_col:
-                        st.write("📋 جدول النسب التكرارية:")
-                        st.dataframe(df_counts)
+                        st.write("📋 جدول النسب المئوية المتقاطعة (%):")
+                        st.dataframe(crosstab_pct.map(lambda x: f"{x}%"))
                     with chart_col:
-                        fig = px.bar(df_counts, x=current_main, y='النسبة المئوية (%)', text=df_counts['النسبة المئوية (%)'].astype(str) + '%', title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                        fig = px.bar(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, barmode='group', text=df_melted_pct['النسبة المئوية (%)'].astype(str) + '%', title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
                         fig.update_traces(textposition='outside')
-                        fig.update_layout(template="plotly_dark", yaxis_title="النسبة المئوية (%)")
                         st.plotly_chart(fig, use_container_width=True)
-                else:
-                    for current_cross in cross_questions:
-                        st.markdown(f'<div class="cross-section-divider"></div>', unsafe_allow_html=True)
-                        st.markdown(f"### 🔗 المقارنة المئوية: [{current_main}] ✖️ [{current_cross}]")
                         
-                        crosstab_pct = pd.crosstab(kobo_data[current_main], kobo_data[current_cross], normalize='columns') * 100
-                        crosstab_pct = crosstab_pct.round(1)
-                        df_melted_pct = pd.melt(crosstab_pct.reset_index(), id_vars=[current_main], value_name='النسبة المئوية (%)')
-                        
-                        chart_col, table_col = st.columns([1, 1])
-                        with table_col:
-                            st.write("📋 جدول النسب المئوية المتقاطعة (%):")
-                            st.dataframe(crosstab_pct.map(lambda x: f"{x}%"))
-                        with chart_col:
-                            fig = px.bar(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, barmode='group', text=df_melted_pct['النسبة المئوية (%)'].astype(str) + '%', title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
-                            fig.update_traces(textposition='outside')
-                            fig.update_layout(template="plotly_dark", yaxis_title="النسبة المئوية (%)")
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            img_bytes_for_user = fig.to_image(format="png", width=1000, height=500)
-                            st.download_button(label=f"📷 تحميل هذا الرسم البياني كصورة مستقلة (PNG)", data=img_bytes_for_user, file_name=f"Chart_{current_main}_{current_cross}.png", mime="image/png")
+                        img_bytes_for_user = fig.to_image(format="png", width=1000, height=500)
+                        st.download_button(label=f"📷 تحميل هذا الرسم البياني كصورة مستقلة (PNG)", data=img_bytes_for_user, file_name=f"Chart_{current_main}_{current_cross}.png", mime="image/png")
 
-                        narrative_text = ""
-                        if run_ai_global and api_key:
-                            existing = [r for r in st.session_state.generated_reports if r['main'] == current_main and r['cross'] == current_cross and r['donor'] == donor_selection and r['theme'] == color_theme]
-                            if not existing:
-                                with st.spinner(f"جاري صياغة التقرير السردي لمحور [{current_cross}]..."):
-                                    try:
-                                        client = genai.Client(api_key=api_key)
-                                        donor_instructions = "اكتب بأسلوب تقارير المنظمات الدولية الفخم والعام."
-                                        if "OCHA" in donor_selection:
-                                            donor_instructions = "صِغ النص بأسلوب أوتشا (OCHA): ركز بشدة على الاختصار البليغ وإبراز الأرقام وتوضيح الفجوة في الاحتياج العاجل."
-                                        elif "UNICEF" in donor_selection:
-                                            donor_instructions = "صِغ النص بأسلوب اليونيسف (UNICEF): ركز بقوة على مؤشرات حماية الأطفال، الفئات الأكثر ضعفاً، وأبعاد النوع الاجتماعي."
-                                        elif "ECHO" in donor_selection:
-                                            donor_instructions = "صِغ النص بأسلوب إيكو (ECHO / SIDA): ركز على معايير الكفاءة والمساءلة الإنسانية، واستدامة الخدمة."
+                    narrative_text = ""
+                    if run_ai_global and api_key:
+                        existing = [r for r in st.session_state.generated_reports if r['main'] == current_main and r['cross'] == current_cross and r['donor'] == donor_selection and r['theme'] == color_theme]
+                        if not existing:
+                            with st.spinner(f"جاري صياغة التقرير السردي لمحور [{current_cross}]..."):
+                                try:
+                                    client = genai.Client(api_key=api_key)
+                                    donor_instructions = "اكتب بأسلوب تقارير المنظمات الدولية الفخم والعام."
+                                    if "OCHA" in donor_selection:
+                                        donor_instructions = "صِغ النص بأسلوب أوتشا (OCHA): ركز بشدة على الاختصار البليغ وإبراز الأرقام وتوضيح الفجوة في الاحتياج العاجل."
+                                    elif "UNICEF" in donor_selection:
+                                        donor_instructions = "صِغ النص بأسلوب اليونيسف (UNICEF): ركز بقوة على مؤشرات حماية الأطفال، الفئات الأكثر ضعفاً، وأبعاد النوع الاجتماعي."
+                                    elif "ECHO" in donor_selection:
+                                        donor_instructions = "صِغ النص بأسلوب إيكو (ECHO / SIDA): ركز على معايير الكفاءة والمساءلة الإنسانية، واستدامة الخدمة."
 
-                                        prompt = f"""أنت مستشار أول لتقارير المتابعة والتقييم (MEAL Specialist) في منظمات دولية.
-                                        اكتب فقرة تحليلية سردية احترافية باللغة العربية الفصحى للتقرير النهائي بناءً على جدول النسب المئوية التالي:
-                                        السؤال الرئيسي: {current_main}
-                                        محور التفكيك: {current_cross}
-                                        جدول النسب المئوية:
-                                        {crosstab_pct.to_string()}
-                                        ⚠️ شرط الصياغة الخاص بالمانح: {donor_instructions}
-                                        قم بتحليل الأرقام بدقة بالغة وبدون مقدمات تقليدية، واختم بتوصية ميدانية واحدة ذكية مبنية على الجدول."""
-                                        
-                                        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                                        narrative_text = response.text
-                                        img_bytes_for_word = fig.to_image(format="png", width=700, height=350)
+                                    prompt = f"""أنت مستشار أول لتقارير المتابعة والتقييم (MEAL Specialist) في منظمات دولية.
+                                    اكتب فقرة تحليلية سردية احترافية باللغة العربية الفصحى للتقرير النهائي بناءً على جدول النسب المئوية التالي:
+                                    السؤال الرئيسي: {current_main}
+                                    محور التفكيك: {current_cross}
+                                    جدول النسب المئوية:
+                                    {crosstab_pct.to_string()}
+                                    ⚠️ شرط الصياغة الخاص بالمانح: {donor_instructions}
+                                    قم بتحليل الأرقام بدقة بالغة وبدون مقدمات تقليدية، واختم بتوصية ميدانية واحدة ذكية مبنية على الجدول."""
+                                    
+                                    response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                                    narrative_text = response.text
+                                    img_bytes_for_word = fig.to_image(format="png", width=700, height=350)
 
-                                        st.session_state.generated_reports.append({
-                                            'main': current_main,
-                                            'cross': current_cross,
-                                            'donor': donor_selection,
-                                            'theme': color_theme,
-                                            'text': narrative_text,
-                                            'image': img_bytes_for_word
-                                        })
-                                    except Exception as e:
-                                        st.error(f"خطأ في الـ AI: {e}")
-                                        narrative_text = "فشل توليد التقرير"
-                            else:
-                                narrative_text = existing[0]['text']
+                                    st.session_state.generated_reports.append({
+                                        'main': current_main,
+                                        'cross': current_cross,
+                                        'donor': donor_selection,
+                                        'theme': color_theme,
+                                        'text': narrative_text,
+                                        'image': img_bytes_for_word
+                                    })
+                                except Exception as e:
+                                    st.error(f"خطأ في الـ AI: {e}")
+                                    narrative_text = "فشل توليد التقرير"
+                        else:
+                            narrative_text = existing[0]['text']
 
-                            st.markdown(f"""<div class="ai-narrative-box"><h4 style="color:#10b981; margin:0; font-weight:700; margin-bottom:10px;">📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="color:#ffffff; line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
+                        st.markdown(f"""<div class="ai-narrative-box"><h4 style="color:#10b981; margin:0; font-weight:700; margin-bottom:10px;">📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
 
-            # --- مركز التحميل ---
+            # --- مركز التحميل الكلي ---
             if st.session_state.generated_reports:
                 st.markdown('<div class="export-box">', unsafe_allow_html=True)
                 st.markdown("### 📥 مركز تحميل المخرجات والتقارير الموجهة الملونة")
@@ -441,5 +385,14 @@ else:
                 bio.seek(0)
                 st.download_button(label=f"📥 تحميل تقرير الـ Word الملون الكامل (.docx)", data=bio, file_name=f"Comprehensive_Report_{donor_selection.split(' ')[0]}_{color_theme.split(' ')[0]}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                 st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        st.info("💡 بانتظار ربط البيانات للبدء بالتحليل التنفيذي والمتقدم...")
+else:
+    st.info("💡 بانتظار ربط البيانات للبدء بالتحليل التنفيذي والمتقدم...")
+
+# ==================== 💎 تذييل حفظ الحقوق الملكية لعام 2026 ====================
+st.markdown("""
+    <div class="rights-footer">
+        <h4 style="margin:0; font-weight:700; font-size:18px;">💡 Smart MEAL Platform | منصة التحليل الذكي للمتابعة والتقييم</h4>
+        <p style="margin:8px 0 0 0; font-size:14px; opacity:0.9;">Designed & Developed by: <b>Mhedy Alkhaldi</b> © 2026</p>
+        <p style="margin:5px 0 0 0; font-size:12px; opacity:0.75; font-style:italic;">Open-Source Humanitarian Solution - Dedicated for General Benefit & Philanthropy</p>
+    </div>
+""", unsafe_allow_html=True)
