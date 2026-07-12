@@ -132,7 +132,7 @@ with st.sidebar:
     kobo_data = None
     
     if source_option == "سحب مباشر عبر الـ API":
-        server_url = st.selectbox("اختر سيرفر الكوبو:", ("https://kf.kobotoolbox.org", "https://kobo.humanitarianresponse.info"))
+        server_url = st.selectbox("اختر سيرفر الكوبو:", ("https://eu.kobotoolbox.org", "https://kf.kobotoolbox.org", "https://kobo.humanitarianresponse.info"))
         api_token = st.text_input("أدخل رمز الأمان (API Token):", type="password")
         asset_id = st.text_input("أدخل معرف الاستمارة (Asset ID):")
         if st.button("🚀 سحب البيانات الآن"):
@@ -145,6 +145,8 @@ with st.sidebar:
                     if 'results' in json_data:
                         kobo_data = pd.DataFrame(json_data['results'])
                         st.success("✅ تم سحب البيانات بنجاح!")
+                else:
+                    st.error(f"فشل الاتصال بكوبو. رمز الخطأ: {response.status_code}")
             except Exception as e:
                 st.error(f"حدث خطأ: {e}")
 
@@ -321,7 +323,7 @@ if kobo_data is not None:
                                     if "OCHA" in donor_selection:
                                         donor_instructions = "صِغ النص بأسلوب أوتشا (OCHA): ركز بشدة على الاختصار البليغ وإبراز الأرقام وتوضيح الفجوة في الاحتياج العاجل."
                                     elif "UNICEF" in donor_selection:
-                                        donor_instructions = "صِغ النص بأسلوب اليونيسف (UNICEF): ركز بقوة على مؤشرات حماية الأطفال, الفئات الأكثر ضعفاً، وأبعاد النوع الاجتماعي."
+                                        donor_instructions = "صِغ النص بأسلوب اليونيسف (UNICEF): ركز بقوة على مؤشرات حماية الأطفال، الفئات الأكثر ضعفاً، وأبعاد النوع الاجتماعي."
                                     elif "ECHO" in donor_selection:
                                         donor_instructions = "صِغ النص بأسلوب إيكو (ECHO / SIDA): ركز على معايير الكفاءة والمساءلة الإنسانية، واستدامة الخدمة."
 
