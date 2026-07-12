@@ -1,0 +1,8 @@
+streamlit
+requests
+pandas
+openpyxl
+plotly
+google-genai
+python-docx
+kaleido
