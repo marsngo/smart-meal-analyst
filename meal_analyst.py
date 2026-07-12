@@ -245,6 +245,7 @@ if kobo_data is not None:
     
     mean_pre, mean_post = 0.0, 0.0
     calculation_ready = False
+    paired_df = None
     
     if analysis_type == "الملف يحتوي على عمودين منفصلين (عمود للقبلي وعمود للبعدي)":
         pre_post_col1, pre_post_col2 = st.columns(2)
@@ -261,36 +262,56 @@ if kobo_data is not None:
             calculation_ready = True
             
     else:
-        # فكفكة وهندسة الحالة المكررة (عمود سكور + عمود نوع التقييم)
-        filter_col1, filter_col2 = st.columns(2)
+        # هندسة الفرز المتقدم لنفس المستفيد بسطور مكررة
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
         with filter_col1:
-            score_column = st.selectbox("📊 اختر العمود الذي يحتوي على الدرجة والأسكور الكلي (Total Score):", ["لا يوجد"] + list(kobo_data.columns))
+            user_id_column = st.selectbox("🆔 اختر عمود اسم المستفيد أو الـ ID الفريد:", ["لا يوجد"] + list(kobo_data.columns))
         with filter_col2:
+            score_column = st.selectbox("📊 اختر العمود الذي يحتوي على الدرجة والأسكور (Total Score):", ["لا يوجد"] + list(kobo_data.columns))
+        with filter_col3:
             type_column = st.selectbox("🏷️ اختر العمود الذي يحدد نوع التقييم (مثال: نوع التقييم):", ["لا يوجد"] + list(kobo_data.columns))
             
-        if score_column != "لا يوجد" and type_column != "لا يوجد":
-            # تصفية السطور بناءً على الكلمات النصية داخل العمود
-            pre_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('قبلي|pre', case=False, na=False)]
-            post_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('بعدي|post', case=False, na=False)]
+        if score_column != "لا يوجد" and type_column != "لا يوجد" and user_id_column != "لا يوجد":
+            # تصفية وفصل السطور
+            pre_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('قبلي|pre', case=False, na=False)].copy()
+            post_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('بعدي|post', case=False, na=False)].copy()
             
             if not pre_rows.empty and not post_rows.empty:
-                mean_pre = pd.to_numeric(pre_rows[score_column], errors='coerce').mean()
-                mean_post = pd.to_numeric(post_rows[score_column], errors='coerce').mean()
-                calculation_ready = True
+                # تحويل السكور لأرقام قبل الدمج
+                pre_rows[score_column] = pd.to_numeric(pre_rows[score_column], errors='coerce')
+                post_rows[score_column] = pd.to_numeric(post_rows[score_column], errors='coerce')
+                
+                # ربط السطور بناء على اسم المستفيد
+                paired_df = pd.merge(
+                    pre_rows[[user_id_column, score_column]], 
+                    post_rows[[user_id_column, score_column]], 
+                    on=user_id_column, 
+                    suffixes=('_قبلي_Pre', '_بعدي_Post')
+                )
+                
+                if not paired_df.empty:
+                    mean_pre = paired_df[f'{score_column}_قبلي_Pre'].mean()
+                    mean_post = paired_df[f'{score_column}_بعدي_Post'].mean()
+                    
+                    # حساب الفارق الصافي لكل شخص مستقل
+                    paired_df['الفارق الصافي والتحسن (Impact)'] = paired_df[f'{score_column}_بعدي_Post'] - paired_df[f'{score_column}_قبلي_Pre']
+                    calculation_ready = True
+                else:
+                    st.warning("⚠️ فشل الربط التلقائي. تأكد من أن أسماء المستفيدين مكتوبة بنفس الأحرف والاملاء تماماً في المقابلتين القبلية والبعدية.")
             else:
                 st.warning("⚠️ لم نجد الكلمات الدلالية ('قبلي' أو 'بعدي') داخل العمود النصي المختار لتصفية السطور.")
 
-    # عرض نتائج الحسابات والمخطط الكلي النظيف من الأخطاء
+    # عرض نتائج الحسابات والمخطط الكلي
     if calculation_ready and not pd.isna(mean_pre) and not pd.isna(mean_post):
         improvement = mean_post - mean_pre
         
         comp_col1, comp_col2, comp_col3 = st.columns(3)
         with comp_col1:
-            st.metric(label="📊 متوسط القبلي (Pre)", value=f"{mean_pre:.2f}")
+            st.metric(label="📊 متوسط القبلي العام (Pre Mean)", value=f"{mean_pre:.2f}")
         with comp_col2:
-            st.metric(label="📈 متوسط البعدي (Post)", value=f"{mean_post:.2f}")
+            st.metric(label="📈 متوسط البعدي العام (Post Mean)", value=f"{mean_post:.2f}")
         with comp_col3:
-            st.metric(label="✨ الفارق الصافي والتحسن", value=f"{improvement:+.2f}", delta=f"{improvement:.2f}")
+            st.metric(label="✨ الفارق الصافي والتحسن الإجمالي", value=f"{improvement:+.2f}", delta=f"{improvement:.2f}")
             
         df_compare = pd.DataFrame({
             'المرحلة (Assessment)': ['التقييم القبلي (Pre)', 'التقييم البعدي (Post)'],
@@ -299,6 +320,13 @@ if kobo_data is not None:
         fig_compare = px.bar(df_compare, x='المرحلة (Assessment)', y='متوسط الدرجة الكلية (Mean Score)', text='متوسط الدرجة الكلية (Mean Score)', title="مقارنة الأداء العام بين القبلي والبعدي", color='المرحلة (Assessment)', color_discrete_sequence=selected_palette)
         fig_compare.update_traces(texttemplate='%{text:.2f}', textposition='outside')
         st.plotly_chart(fig_compare, use_container_width=True)
+        
+        # إذا كان الفرز على مستوى الفرد جاهزاً، اعرض جدول الأثر الفريد الفخم للحقوق والنتائج
+        if paired_df is not None:
+            st.markdown("### 👤 جدول قياس الفارق الفردي لكل مستفيد (Individual Impact Tracking)")
+            st.write("يوضح الجدول التالي درجات كل شخص في المقابلتين، والفارق الصافي المحقق له بالملي:")
+            st.dataframe(paired_df, use_container_width=True)
+            
     elif calculation_ready:
         st.error("⚠️ فشل حساب الأرقام. يرجى التحقق من أن عمود الدرجة يحتوي على أرقام صافية وخالٍ من النصوص الكشكولية.")
 
