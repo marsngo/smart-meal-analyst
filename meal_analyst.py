@@ -321,7 +321,7 @@ if kobo_data is not None:
                                     if "OCHA" in donor_selection:
                                         donor_instructions = "صِغ النص بأسلوب أوتشا (OCHA): ركز بشدة على الاختصار البليغ وإبراز الأرقام وتوضيح الفجوة في الاحتياج العاجل."
                                     elif "UNICEF" in donor_selection:
-                                        donor_instructions = "صِغ النص بأسلوب اليونيسف (UNICEF): ركز بقوة على مؤشرات حماية الأطفال، الفئات الأكثر ضعفاً، وأبعاد النوع الاجتماعي."
+                                        donor_instructions = "صِغ النص بأسلوب اليونيسف (UNICEF): ركز بقوة على مؤشرات حماية الأطفال, الفئات الأكثر ضعفاً، وأبعاد النوع الاجتماعي."
                                     elif "ECHO" in donor_selection:
                                         donor_instructions = "صِغ النص بأسلوب إيكو (ECHO / SIDA): ركز على معايير الكفاءة والمساءلة الإنسانية، واستدامة الخدمة."
 
@@ -349,27 +349,27 @@ if kobo_data is not None:
                                 except Exception as e:
                                     st.error(f"خطأ في الـ AI: {e}")
                                     narrative_text = "فشل توليد التقرير"
-                            else:
-                                narrative_text = existing[0]['text']
+                        else:
+                            narrative_text = existing[0]['text']
 
                         st.markdown(f"""<div class="ai-narrative-box"><h4>📝 التقرير السردي المخصص لـ [{donor_selection}]:</h4><div style="line-height:1.8; font-size:15px; text-align:justify;">{narrative_text.replace('\n', '<br>')}</div></div>""", unsafe_allow_html=True)
 
             # --- مركز التحميل الكلي ---
-            if st.session_state.generated_reports:
-                st.markdown('<div class="export-box">', unsafe_allow_html=True)
-                st.markdown("### 📥 مركز تحميل المخرجات والتقارير الموجهة الملونة")
-                doc = Document()
-                for section in doc.sections:
-                    section.top_margin = Inches(1)
-                    section.bottom_margin = Inches(1)
-                    section.left_margin = Inches(1)
-                    section.right_margin = Inches(1)
+            if 'generated_reports' in st.session_state and st.session_state.generated_reports:
+                valid_reports = [r for r in st.session_state.generated_reports if r['donor'] == donor_selection and r['theme'] == color_theme]
+                if valid_reports:
+                    st.markdown('<div class="export-box">', unsafe_allow_html=True)
+                    st.markdown("### 📥 مركز تحميل المخرجات والتقارير الموجهة الملونة")
+                    doc = Document()
+                    for section in doc.sections:
+                        section.top_margin = Inches(1)
+                        section.bottom_margin = Inches(1)
+                        section.left_margin = Inches(1)
+                        section.right_margin = Inches(1)
 
-                title = doc.add_heading(f"التقرير التحليلي المخصص للمانح ({donor_selection}) - ثيم {color_theme}", level=1)
-                title.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                
-                for report in st.session_state.generated_reports:
-                    if report['donor'] == donor_selection and report['theme'] == color_theme:
+                    doc.add_heading(f"التقرير التحليلي المخصص للمانح ({donor_selection}) - ثيم {color_theme}", level=1).alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    
+                    for report in valid_reports:
                         h2 = doc.add_heading(f"📊 المتغير: {report['main']}", level=2)
                         h2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                         h3 = doc.add_heading(f"🔗 محور التفكيك: {report['cross']}", level=3)
@@ -385,11 +385,11 @@ if kobo_data is not None:
                         p.paragraph_format.line_spacing = 1.5
                         doc.add_page_break()
 
-                bio = io.BytesIO()
-                doc.save(bio)
-                bio.seek(0)
-                st.download_button(label=f"📥 تحميل تقرير الـ Word الملون الكامل (.docx)", data=bio, file_name=f"Comprehensive_Report_{donor_selection.split(' ')[0]}_{color_theme.split(' ')[0]}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                st.markdown('</div>', unsafe_allow_html=True)
+                    bio = io.BytesIO()
+                    doc.save(bio)
+                    bio.seek(0)
+                    st.download_button(label=f"📥 تحميل تقرير الـ Word الملون الكامل (.docx)", data=bio, file_name=f"Comprehensive_Report_{donor_selection.split(' ')[0]}_{color_theme.split(' ')[0]}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("💡 بانتظار ربط البيانات للبدء بالتحليل التنفيذي والمتقدم...")
 
