@@ -321,6 +321,75 @@ if kobo_data is not None:
     elif calculation_ready:
         st.error("⚠️ فشل حساب الأرقام. يرجى التحقق من أن عمود الدرجة يحتوي على أرقام صافية وخالٍ من النصوص.")
 
+    # --- 🧠 قسم تحليل المشاعر والردود المفتوحة الجغرافي (AI Sentiment Analysis) ---
+    st.markdown("---")
+    st.header("🧠 تحليل مشاعر الردود المفتوحة والربط الجغرافي (AI Sentiment Analysis)")
+    
+    if not api_key:
+        st.info("💡 لتشغيل ميزة تحليل المشاعر التلقائي والفرز الجغرافي، يرجى تفعيل مفتاح Gemini API في الشريط الجانبي أولاً.")
+    else:
+        sent_col1, sent_col2 = st.columns(2)
+        with sent_col1:
+            text_column = st.selectbox("💬 اختر عمود السؤال المفتوح (مثال: مقترحات، شكاوى):", ["لا يوجد"] + list(kobo_data.columns))
+        with sent_col2:
+            geo_name_column = st.selectbox("📍 اختر عمود المنطقة الاسمية (مثال: عفرين، جنديرس، إدلب):", ["لا يوجد"] + list(kobo_data.columns))
+            
+        if text_column != "لا يوجد" and geo_name_column != "لا يوجد":
+            # تصفية البيانات من القيم الفارغة للنصوص والمواقع لتوفير ترافيك الـ API
+            valid_rows = kobo_data[[text_column, geo_name_column]].dropna().head(40) # معالجة أول 40 سطر حية للتوفير والسرعة
+            
+            if not valid_rows.empty:
+                if st.button("🚀 تشغيل محرك تحليل المشاعر والربط الجغرافي"):
+                    with st.spinner("جاري استدعاء خبير الـ AI وقراءة ردود المستفيدين وتصنيفها..."):
+                        try:
+                            # صياغة النص الممرر للذكاء الاصطناعي
+                            data_payload = []
+                            for idx, row in valid_rows.iterrows():
+                                data_payload.append(f"المنطقة: {row[geo_name_column]} | الرد: {row[text_column]}")
+                            payload_str = "\n".join(data_payload)
+                            
+                            client = genai.Client(api_key=api_key)
+                            prompt = f"""أنت نظام خبير ذكاء اصطناعي مخصص لتحليل مشاعر المستفيدين في العمل الإنساني.
+                            قم بقراءة الردود المفتوحة التالية والمقترنة بالموقع الجغرافي:
+                            {payload_str}
+                            
+                            المطلوب منك هو تجميع وتحليل البيانات وإخراج النتيجة على شكل جدول بيانات دقيق باللغة العربية يفصل بين الأعمدة بـ علامة | كالتالي:
+                            المنطقة | الرد المفتوح | التصنيف (إيجابي أو سلبي أو محايد) | السبب الأساسي/الكلمة المفتاحية
+                            
+                            ⚠️ شروط صارمة: اكتب الجدول مباشرة دون أي مقدمات أو كلام خارج الجدول لكي نقوم بقراءته برمجياً بنجاح."""
+                            
+                            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                            output_text = response.text
+                            
+                            # معالجة استجابة الجدول البرمجية وتحويلها لـ DataFrame
+                            rows = [r.strip() for r in output_text.strip().split('\n') if '|' in r]
+                            # استبعاد العناوين والخطوط الفاصلة في الماركدوان
+                            clean_rows = []
+                            for r in rows:
+                                if "المنطقة" in r or "---" in r: continue
+                                clean_rows.append([item.strip() for item in r.split('|') if item.strip() != ""])
+                            
+                            if clean_rows:
+                                sentiment_df = pd.DataFrame(clean_rows, columns=["المنطقة", "الرد المفتوح", "التصنيف", "السبب الأساسي"])
+                                
+                                st.success("✅ اكتمل تحليل المشاعر الجغرافي بنجاح!")
+                                
+                                # رسم بياني ملون لتوزيع المشاعر حسب المناطق
+                                fig_sent = px.histogram(sentiment_df, x="المنطقة", color="التصنيف", barmode="group",
+                                                         title="توزيع مشاعر ورضا المستفيدين حسب المناطق الجغرافية الاسمية",
+                                                         color_discrete_map={"إيجابي": "#10b981", "سلبي": "#ef4444", "محايد": "#f59e0b"})
+                                st.plotly_chart(fig_sent, use_container_width=True)
+                                
+                                # عرض الجدول المفصل الفخم
+                                st.markdown("### 📋 جدول الفرز والتحليل المفصل للردود والشكاوى:")
+                                st.dataframe(sentiment_df, use_container_width=True)
+                            else:
+                                st.error("فشل معالجة رد الذكاء الاصطناعي برمجياً. جرب الضغط مرة أخرى.")
+                        except Exception as e:
+                            st.error(f"حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: {e}")
+            else:
+                st.warning("⚠️ لا توجد ردود نصية صالحة للتحليل في الأعمدة المختارة.")
+
     # --- مصفوفة التحليل الكبرى للفئات والأعمدة الديموغرافية ---
     st.markdown("---")
     st.header("🎛️ مصفوفة التحليل والمقارنات العامة (Bulk Analysis)")
