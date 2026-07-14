@@ -262,7 +262,6 @@ if kobo_data is not None:
             calculation_ready = True
             
     else:
-        # هندسة الفرز المتقدم لنفس المستفيد بسطور مكررة
         filter_col1, filter_col2, filter_col3 = st.columns(3)
         with filter_col1:
             user_id_column = st.selectbox("🆔 اختر عمود اسم المستفيد أو الـ ID الفريد:", ["لا يوجد"] + list(kobo_data.columns))
@@ -272,16 +271,13 @@ if kobo_data is not None:
             type_column = st.selectbox("🏷️ اختر العمود الذي يحدد نوع التقييم (مثال: نوع التقييم):", ["لا يوجد"] + list(kobo_data.columns))
             
         if score_column != "لا يوجد" and type_column != "لا يوجد" and user_id_column != "لا يوجد":
-            # تصفية وفصل السطور
             pre_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('قبلي|pre', case=False, na=False)].copy()
             post_rows = kobo_data[kobo_data[type_column].astype(str).str.contains('بعدي|post', case=False, na=False)].copy()
             
             if not pre_rows.empty and not post_rows.empty:
-                # تحويل السكور لأرقام قبل الدمج
                 pre_rows[score_column] = pd.to_numeric(pre_rows[score_column], errors='coerce')
                 post_rows[score_column] = pd.to_numeric(post_rows[score_column], errors='coerce')
                 
-                # ربط السطور بناء على اسم المستفيد
                 paired_df = pd.merge(
                     pre_rows[[user_id_column, score_column]], 
                     post_rows[[user_id_column, score_column]], 
@@ -292,8 +288,6 @@ if kobo_data is not None:
                 if not paired_df.empty:
                     mean_pre = paired_df[f'{score_column}_قبلي_Pre'].mean()
                     mean_post = paired_df[f'{score_column}_بعدي_Post'].mean()
-                    
-                    # حساب الفارق الصافي لكل شخص مستقل
                     paired_df['الفارق الصافي والتحسن (Impact)'] = paired_df[f'{score_column}_بعدي_Post'] - paired_df[f'{score_column}_قبلي_Pre']
                     calculation_ready = True
                 else:
@@ -321,7 +315,6 @@ if kobo_data is not None:
         fig_compare.update_traces(texttemplate='%{text:.2f}', textposition='outside')
         st.plotly_chart(fig_compare, use_container_width=True)
         
-        # إذا كان الفرز على مستوى الفرد جاهزاً، اعرض جدول الأثر الفريد الفخم للحقوق والنتائج
         if paired_df is not None:
             st.markdown("### 👤 جدول قياس الفارق الفردي لكل مستفيد (Individual Impact Tracking)")
             st.write("يوضح الجدول التالي درجات كل شخص في المقابلتين، والفارق الصافي المحقق له بالملي:")
@@ -362,35 +355,61 @@ if kobo_data is not None:
             st.markdown(f'<div class="matrix-divider"></div>', unsafe_allow_html=True)
             st.markdown(f"## 📊 كتلة التحليل الأساسية للسؤال: [{current_main}]")
             
+            # --- ميزات عرض الرسوم البيانية جنباً إلى جنب وتخصيص نوعها ---
+            st.markdown("🔍 **خيارات العرض الفوري للرسم البياني الحالي:**")
+            chart_selector_col, style_col = st.columns([1, 2])
+            with chart_selector_col:
+                chart_type = st.selectbox(f"اختر نوع الرسم لـ [{current_main[:15]}...]:", ("أعمدة رأسي (Bar)", "دائرة (Pie)", "دونات (Donut)", "خطوط (Line)"), key=f"type_{current_main}")
+
             if not cross_questions:
                 df_counts = kobo_data[current_main].value_counts().reset_index()
                 df_counts.columns = [current_main, 'العدد']
                 df_counts['النسبة المئوية (%)'] = (df_counts['العدد'] / df_counts['العدد'].sum() * 100).round(1)
                 
-                chart_col, table_col = st.columns([2, 1])
-                with table_col:
+                # إنشاء حيزين جنباً إلى جنب للجدول والرسم
+                table_side_col, chart_side_col = st.columns([1, 2])
+                with table_side_col:
                     st.write("📋 جدول النسب التكرارية:")
-                    st.dataframe(df_counts)
-                with chart_col:
-                    fig = px.bar(df_counts, x=current_main, y='النسبة المئوية (%)', text=df_counts['النسبة المئوية (%)'].astype(str) + '%', title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
-                    fig.update_traces(textposition='outside')
+                    st.dataframe(df_counts, use_container_width=True)
+                with chart_side_col:
+                    # توليد الرسم بناءً على اختيار المستخدم
+                    if chart_type == "أعمدة رأسي (Bar)":
+                        fig = px.bar(df_counts, x=current_main, y='النسبة المئوية (%)', text=df_counts['النسبة المئوية (%)'].astype(str) + '%', title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                        fig.update_traces(textposition='outside')
+                    elif chart_type == "دائرة (Pie)":
+                        fig = px.pie(df_counts, values='العدد', names=current_main, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                    elif chart_type == "دونات (Donut)":
+                        fig = px.pie(df_counts, values='العدد', names=current_main, hole=0.4, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                    else:  # Line Chart
+                        fig = px.line(df_counts, x=current_main, y='النسبة المئوية (%)', markers=True, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                    
                     st.plotly_chart(fig, use_container_width=True)
             else:
                 for current_cross in cross_questions:
                     st.markdown(f'<div class="cross-section-divider"></div>', unsafe_allow_html=True)
-                    st.markdown(f"### 🔗 المقارنة المئوية: [{current_main}] ✖️ [{current_cross}]")
+                    st.markdown(f"### 🔗 المقارنة المئوية المتقاطعة: [{current_main}] ✖️ [{current_cross}]")
                     
                     crosstab_pct = pd.crosstab(kobo_data[current_main], kobo_data[current_cross], normalize='columns') * 100
                     crosstab_pct = crosstab_pct.round(1)
                     df_melted_pct = pd.melt(crosstab_pct.reset_index(), id_vars=[current_main], value_name='النسبة المئوية (%)')
                     
-                    chart_col, table_col = st.columns([1, 1])
-                    with table_col:
+                    # إنشاء حيزين جنباً إلى جنب للجدول والرسم المتقاطع
+                    table_side_col, chart_side_col = st.columns([1, 2])
+                    with table_side_col:
                         st.write("📋 جدول النسب المئوية المتقاطعة (%):")
-                        st.dataframe(crosstab_pct.map(lambda x: f"{x}%"))
-                    with chart_col:
-                        fig = px.bar(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, barmode='group', text=df_melted_pct['النسبة المئوية (%)'].astype(str) + '%', title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
-                        fig.update_traces(textposition='outside')
+                        st.dataframe(crosstab_pct.map(lambda x: f"{x}%"), use_container_width=True)
+                    with chart_side_col:
+                        # توليد الرسم البياني المتقاطع بناءً على اختيار المستخدم
+                        if chart_type == "أعمدة رأسي (Bar)":
+                            fig = px.bar(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, barmode='group', text=df_melted_pct['النسبة المئوية (%)'].astype(str) + '%', title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
+                            fig.update_traces(textposition='outside')
+                        elif chart_type == "دائرة (Pie)":
+                            fig = px.pie(df_melted_pct, values='النسبة المئوية (%)', names=current_main, color=current_cross, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
+                        elif chart_type == "دونات (Donut)":
+                            fig = px.pie(df_melted_pct, values='النسبة المئوية (%)', names=current_main, color=current_cross, hole=0.4, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
+                        else:  # Line Chart
+                            fig = px.line(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, markers=True, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
+                        
                         st.plotly_chart(fig, use_container_width=True)
 
                     narrative_text = ""
