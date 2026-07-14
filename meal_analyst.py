@@ -295,7 +295,6 @@ if kobo_data is not None:
             else:
                 st.warning("⚠️ لم نجد الكلمات الدلالية ('قبلي' أو 'بعدي') داخل العمود النصي المختار لتصفية السطور.")
 
-    # عرض نتائج الحسابات والمخطط الكلي
     if calculation_ready and not pd.isna(mean_pre) and not pd.isna(mean_post):
         improvement = mean_post - mean_pre
         
@@ -317,11 +316,10 @@ if kobo_data is not None:
         
         if paired_df is not None:
             st.markdown("### 👤 جدول قياس الفارق الفردي لكل مستفيد (Individual Impact Tracking)")
-            st.write("يوضح الجدول التالي درجات كل شخص في المقابلتين، والفارق الصافي المحقق له بالملي:")
             st.dataframe(paired_df, use_container_width=True)
             
     elif calculation_ready:
-        st.error("⚠️ فشل حساب الأرقام. يرجى التحقق من أن عمود الدرجة يحتوي على أرقام صافية وخالٍ من النصوص الكشكولية.")
+        st.error("⚠️ فشل حساب الأرقام. يرجى التحقق من أن عمود الدرجة يحتوي على أرقام صافية وخالٍ من النصوص.")
 
     # --- مصفوفة التحليل الكبرى للفئات والأعمدة الديموغرافية ---
     st.markdown("---")
@@ -355,7 +353,6 @@ if kobo_data is not None:
             st.markdown(f'<div class="matrix-divider"></div>', unsafe_allow_html=True)
             st.markdown(f"## 📊 كتلة التحليل الأساسية للسؤال: [{current_main}]")
             
-            # --- ميزات عرض الرسوم البيانية جنباً إلى جنب وتخصيص نوعها ---
             st.markdown("🔍 **خيارات العرض الفوري للرسم البياني الحالي:**")
             chart_selector_col, style_col = st.columns([1, 2])
             with chart_selector_col:
@@ -366,20 +363,18 @@ if kobo_data is not None:
                 df_counts.columns = [current_main, 'العدد']
                 df_counts['النسبة المئوية (%)'] = (df_counts['العدد'] / df_counts['العدد'].sum() * 100).round(1)
                 
-                # إنشاء حيزين جنباً إلى جنب للجدول والرسم
                 table_side_col, chart_side_col = st.columns([1, 2])
                 with table_side_col:
                     st.write("📋 جدول النسب التكرارية:")
                     st.dataframe(df_counts, use_container_width=True)
                 with chart_side_col:
-                    # توليد الرسم بناءً على اختيار المستخدم
                     if chart_type == "أعمدة رأسي (Bar)":
-                        fig = px.bar(df_counts, x=current_main, y='النسبة المئوية (%)', text=df_counts['النسبة المئوية (%)'].astype(str) + '%', title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                        fig = px.bar(df_counts, x=current_main, y='النسبة المئوية (%)', text=df_counts['النسبة المئوية (%)'].astype(str) + '%', title=f"التوزيع المئوي لإجابات: {current_main}", color=current_main, color_discrete_sequence=selected_palette)
                         fig.update_traces(textposition='outside')
                     elif chart_type == "دائرة (Pie)":
-                        fig = px.pie(df_counts, values='العدد', names=current_main, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                        fig = px.pie(df_counts, values='العدد', names=current_main, color=current_main, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
                     elif chart_type == "دونات (Donut)":
-                        fig = px.pie(df_counts, values='العدد', names=current_main, hole=0.4, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
+                        fig = px.pie(df_counts, values='العدد', names=current_main, color=current_main, hole=0.4, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
                     else:  # Line Chart
                         fig = px.line(df_counts, x=current_main, y='النسبة المئوية (%)', markers=True, title=f"التوزيع المئوي لإجابات: {current_main}", color_discrete_sequence=selected_palette)
                     
@@ -393,20 +388,18 @@ if kobo_data is not None:
                     crosstab_pct = crosstab_pct.round(1)
                     df_melted_pct = pd.melt(crosstab_pct.reset_index(), id_vars=[current_main], value_name='النسبة المئوية (%)')
                     
-                    # إنشاء حيزين جنباً إلى جنب للجدول والرسم المتقاطع
                     table_side_col, chart_side_col = st.columns([1, 2])
                     with table_side_col:
                         st.write("📋 جدول النسب المئوية المتقاطعة (%):")
                         st.dataframe(crosstab_pct.map(lambda x: f"{x}%"), use_container_width=True)
                     with chart_side_col:
-                        # توليد الرسم البياني المتقاطع بناءً على اختيار المستخدم
                         if chart_type == "أعمدة رأسي (Bar)":
                             fig = px.bar(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, barmode='group', text=df_melted_pct['النسبة المئوية (%)'].astype(str) + '%', title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
                             fig.update_traces(textposition='outside')
                         elif chart_type == "دائرة (Pie)":
-                            fig = px.pie(df_melted_pct, values='النسبة المئوية (%)', names=current_main, color=current_cross, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
+                            fig = px.pie(df_melted_pct, values='النسبة المئوية (%)', names=current_main, color=current_main, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
                         elif chart_type == "دونات (Donut)":
-                            fig = px.pie(df_melted_pct, values='النسبة المئوية (%)', names=current_main, color=current_cross, hole=0.4, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
+                            fig = px.pie(df_melted_pct, values='النسبة المئوية (%)', names=current_main, color=current_main, hole=0.4, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
                         else:  # Line Chart
                             fig = px.line(df_melted_pct, x=current_main, y='النسبة المئوية (%)', color=current_cross, markers=True, title=f"المقارنة المئوية لـ [{current_main}] حسب فئات [{current_cross}]", color_discrete_sequence=selected_palette)
                         
